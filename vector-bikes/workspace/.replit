@@ -1,0 +1,14 @@
+# Vector Bikes — configuración de Replit.
+# VERIFICAR ANTES DE INSTALAR: el nombre del módulo de Node 24 no está confirmado en la documentación.
+# Si Replit lo cambia al elegir Node 24 en el selector de lenguaje/módulo, se acepta su valor.
+modules = ["nodejs-24"]
+run = "corepack pnpm dev"
+
+[[ports]]
+localPort = 4321
+externalPort = 80
+
+[deployment]
+deploymentTarget = "cloudrun"
+build = ["sh", "-c", "corepack pnpm install --frozen-lockfile && corepack pnpm build"]
+run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]

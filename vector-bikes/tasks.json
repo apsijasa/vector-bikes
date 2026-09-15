@@ -1,0 +1,366 @@
+[
+  {
+    "id": "E1-T1",
+    "title": "Base del proyecto y servidor de salud",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": [],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm check` runs THE SYSTEM SHALL exit 0 with no Biome, `astro check` or `tsc` errors.",
+      "WHEN `pnpm build` runs THE SYSTEM SHALL exit 0 and write `dist/server/entry.mjs` and `dist/client/index.html`.",
+      "WHEN `dist/client/index.html` is read THE SYSTEM SHALL contain `lang=\"es-CL\"` and the text `Mecánica de precisión.`",
+      "WHEN `.replit` and `package.json` are read THE SYSTEM SHALL both run `node dist/server/entry.mjs` with `PORT=4321`, `.replit` SHALL declare `localPort = 4321`, and `package.json` SHALL declare `pnpm@12.4.2`.",
+      "WHEN `sh scripts/smoke.sh` runs THE SYSTEM SHALL start `dist/server/entry.mjs`, get a `/api/health` body containing `\"ok\":true`, and exit 0."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm build",
+      "test -f dist/server/entry.mjs",
+      "grep -q 'lang=\"es-CL\"' dist/client/index.html",
+      "grep -q 'Mecánica de precisión.' dist/client/index.html",
+      "grep -q 'PORT=4321 node dist/server/entry.mjs' .replit",
+      "grep -q 'localPort = 4321' .replit",
+      "grep -q 'PORT=4321 node dist/server/entry.mjs' package.json",
+      "grep -q '\"packageManager\": \"pnpm@12.4.2\"' package.json",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-01-base",
+    "files": ["src/styles/global.css", "src/layouts/Base.astro", "src/pages/index.astro", "src/pages/api/health.ts", "scripts/smoke.sh"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T2",
+    "title": "Entorno y base de datos",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": ["E1-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/foundation.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed, proving a missing `DATABASE_URL` is named, every table in `allTables` exists after migrations in PGlite, and a second active block on the same date and start is rejected.",
+      "WHEN `pnpm db:migrate` runs twice against `DATABASE_URL` THE SYSTEM SHALL exit 0 both times.",
+      "WHEN `pnpm db:check` runs THE SYSTEM SHALL exit 0 after confirming `select 1` and that every table created by `drizzle/*.sql` exists.",
+      "WHEN the migration emitted by `pnpm db:generate` is read THE SYSTEM SHALL contain the index name `uq_booking_blocks_active_slot`.",
+      "WHEN `sh scripts/smoke.sh` runs after `pnpm build` THE SYSTEM SHALL print a `/api/health` body containing `\"db\":true` and exit 0."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/foundation.test.ts",
+      "grep -q 'uq_booking_blocks_active_slot' drizzle/*.sql",
+      "pnpm db:migrate",
+      "pnpm db:migrate",
+      "pnpm db:check",
+      "pnpm build",
+      "sh scripts/smoke.sh | grep -q '\"db\":true'"
+    ],
+    "checkpoint": "step-02-database",
+    "files": ["src/server/db/schema.ts", "src/server/db/client.ts", "tests/helpers/pglite.ts", "tests/integration/foundation.test.ts", "src/pages/api/health.ts", "drizzle/**"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T3",
+    "title": "Motor de agenda puro con zonas horarias",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": ["E1-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/unit/slots.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed, asserting a 15:00 local booking maps to `2026-01-15T18:00:00.000Z` in summer and `2026-06-15T19:00:00.000Z` in winter.",
+      "WHEN `localToInstant(\"2026-09-06\", \"00:00\")` is evaluated THE SYSTEM SHALL return `null`, because that local time does not exist in America/Santiago.",
+      "WHEN `computeDay` evaluates `2026-09-18` THE SYSTEM SHALL return `status` `holiday` with `holidayName` `Independencia Nacional`.",
+      "WHEN `computeDay` evaluates a day with `usedCount` 4 THE SYSTEM SHALL return `status` `full` and no blocks.",
+      "WHEN `computeDay` evaluates `retiro` for a weekday THE SYSTEM SHALL mark `19:30` as `noroom`.",
+      "WHEN `missingHolidayYears(\"2026-12-10\", 30)` is evaluated THE SYSTEM SHALL return `[\"2027\"]`."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/unit/slots.test.ts",
+      "pnpm test"
+    ],
+    "checkpoint": "step-03-slots",
+    "files": ["src/data/feriados-cl.json", "src/server/booking/rules.ts", "src/server/booking/holidays.ts", "src/server/booking/slots.ts", "tests/unit/slots.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T4",
+    "title": "Escritura transaccional de reservas",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": ["E1-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/create-booking.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN a `taller` booking is created for `2026-09-16` at `16:30` THE SYSTEM SHALL store code `VB-260916-1630` and exactly 1 active block.",
+      "WHEN a `retiro` booking is created THE SYSTEM SHALL store 2 consecutive active blocks and `pickup_fee_clp` 15000.",
+      "WHEN a date already has 4 non-cancelled bookings THE SYSTEM SHALL reject a fifth with `slot_unavailable`.",
+      "WHEN a booking is cancelled THE SYSTEM SHALL set its blocks `is_active = false` and allow a new booking in that block with code `VB-260916-1630-2`.",
+      "WHEN 50 concurrent `createBooking` calls target one block THE SYSTEM SHALL return exactly 1 success and 49 `slot_unavailable`, leaving 1 active block row."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/create-booking.test.ts",
+      "pnpm test tests/integration/concurrency.test.ts",
+      "pnpm test"
+    ],
+    "checkpoint": "step-04-booking-writes",
+    "files": ["src/server/booking/tokens.ts", "src/server/booking/create-booking.ts", "src/server/booking/cancel-booking.ts", "tests/integration/create-booking.test.ts", "tests/integration/concurrency.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T5",
+    "title": "API pública de disponibilidad y reservas",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": ["E1-T4"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/api.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed, with Turnstile mocked and no network access.",
+      "WHEN `GET /api/disponibilidad` receives `dias=40` THE SYSTEM SHALL return 422 with `code` `validation_error` and a `fields.dias` entry.",
+      "WHEN `POST /api/reservas` receives a valid `taller` booking for `2026-09-16` at `16:30` THE SYSTEM SHALL return 201 with body `{\"code\":\"VB-260916-1630\",\"service_date\":\"2026-09-16\",\"start\":\"16:30\",\"end\":\"17:00\",\"mode\":\"taller\",\"fee\":0}`.",
+      "WHEN Turnstile verification returns `success: false` THE SYSTEM SHALL return 403 with `code` `turnstile_failed` and insert no booking.",
+      "WHEN a sixth POST arrives from one IP within 10 minutes THE SYSTEM SHALL return 429 with header `Retry-After: 600`.",
+      "WHEN `sh scripts/smoke.sh` runs after `pnpm build` THE SYSTEM SHALL exit 0, proving the new endpoints do not break server startup."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/api.test.ts",
+      "pnpm test",
+      "pnpm build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-05-public-api",
+    "files": ["src/server/api/turnstile.ts", "src/server/api/handlers.ts", "src/pages/api/disponibilidad.ts", "src/pages/api/reservas.ts", "tests/integration/api.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T6",
+    "title": "Landing estática fiel al diseño aprobado",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": ["E1-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test:build tests/build/landing.test.ts` runs after `pnpm build` THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN `dist/client/index.html` is read THE SYSTEM SHALL contain exactly one `<h1` and the section ids `como-funciona`, `reservar`, `retiro`, `taller`, `preguntas` in that order.",
+      "WHEN `dist/client/index.html` is read THE SYSTEM SHALL contain the footer text `Av. Kennedy 7666, Vitacura` and the link `https://instagram.com/vector.bikes`.",
+      "WHEN `PUBLIC_WHATSAPP_NUMBER` is empty at build time THE SYSTEM SHALL emit no element with `class=\"wa\"`.",
+      "WHEN `whatsappHref(\"+56 9 1234 5678\")` is evaluated THE SYSTEM SHALL return `https://wa.me/56912345678`."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test",
+      "pnpm build",
+      "pnpm test:build tests/build/landing.test.ts",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-06-landing",
+    "files": ["src/lib/site.ts", "src/layouts/Base.astro", "src/components/Landing.astro", "src/pages/index.astro", "tests/build/landing.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T7",
+    "title": "Isla de reserva en Preact",
+    "epic": "01-sitio-y-reservas",
+    "dependencies": ["E1-T5", "E1-T6"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/unit/booking-state.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN the reducer receives `submitFailed` with status 409 THE SYSTEM SHALL clear the selected block and set the message `El bloque ya no está disponible`.",
+      "WHEN `ticketCode(\"2026-09-16\", \"16:30\")` and `formatClp(15000)` are evaluated THE SYSTEM SHALL return `VB-260916-1630` and `$15.000`.",
+      "WHEN `pnpm test:build tests/build/island.test.ts` runs after `pnpm build` THE SYSTEM SHALL find an `astro-island` whose `component-url` includes `BookingIsland` in `dist/client/index.html`.",
+      "WHEN `dist/client/index.html` is read THE SYSTEM SHALL contain labels `for=\"f-nombre\"`, `for=\"f-tel\"`, `for=\"f-mail\"`, `for=\"f-bici\"`, `for=\"f-desc\"`, `for=\"f-comuna\"` and `for=\"f-dir\"`."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/unit/booking-state.test.ts",
+      "pnpm test",
+      "pnpm build",
+      "pnpm test:build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-07-booking-island",
+    "files": ["src/components/islands/booking-state.ts", "src/components/islands/BookingIsland.tsx", "src/components/Landing.astro", "tests/unit/booking-state.test.ts", "tests/build/island.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T1",
+    "title": "Correos transaccionales con transporte intercambiable",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E1-T5"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/email.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed and no network access.",
+      "WHEN a booking is created through `handleCreateBooking` THE SYSTEM SHALL return 201 and then queue exactly 2 messages: one to the customer and one to `info@vectorbikes.cl`.",
+      "WHEN the customer confirmation is built THE SYSTEM SHALL attach `reserva-vector-bikes.ics` containing `BEGIN:VCALENDAR` and include a link containing `/reservas/cancelar?token=`.",
+      "WHEN customer-provided text contains `<script>` THE SYSTEM SHALL render it escaped as `&lt;script&gt;` in email HTML.",
+      "WHEN `notifyBookingCancelled` runs THE SYSTEM SHALL queue 1 message to `info@vectorbikes.cl` whose subject contains `Reserva cancelada`."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/email.test.ts",
+      "pnpm test",
+      "pnpm build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-08-emails",
+    "files": ["src/server/email/transport.ts", "src/server/email/templates.ts", "src/server/email/notifications.ts", "src/pages/api/reservas.ts", "tests/integration/email.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T2",
+    "title": "Cancelación con token de un solo uso",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E2-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/cancel-flow.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN a customer confirms cancellation with a valid token before the booking starts THE SYSTEM SHALL set `status` `cancelled`, `cancelled_by` `customer`, set `cancel_token_used_at`, deactivate its blocks, and queue 1 email to `info@vectorbikes.cl`.",
+      "WHEN the same cancellation token is submitted a second time THE SYSTEM SHALL return the `cancelled` view, write no rows and send no email.",
+      "WHEN the booking has already started THE SYSTEM SHALL return the `started` view and keep `status` `confirmed`.",
+      "WHEN a POST carries an `Origin` different from the origin of `PUBLIC_SITE_URL` THE SYSTEM SHALL reject it (`isAllowedOrigin` returns `false`)."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/cancel-flow.test.ts",
+      "pnpm test",
+      "pnpm build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-09-cancellation",
+    "files": ["src/server/api/handlers.ts", "src/server/booking/cancel-flow.ts", "src/pages/reservas/cancelar.astro", "tests/integration/cancel-flow.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T3",
+    "title": "Acceso admin con sesión propia",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E2-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/admin-auth.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN a stored password hash is created THE SYSTEM SHALL use the format prefix `scrypt$16384$8$1$` and verify only the original password.",
+      "WHEN 5 failed logins for one IP hash and email occur within 15 minutes THE SYSTEM SHALL return `rate_limited` on the next attempt even with the correct password.",
+      "WHEN `setAdminPassword` updates an existing admin THE SYSTEM SHALL revoke that admin's existing sessions.",
+      "WHEN `scripts/admin-set-password.ts` runs without `ADMIN_EMAIL` THE SYSTEM SHALL print `Variable de entorno faltante o inválida: ADMIN_EMAIL` and not touch the database."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/admin-auth.test.ts",
+      "env -u ADMIN_EMAIL -u ADMIN_PASSWORD node scripts/admin-set-password.ts 2>&1 | grep -q 'Variable de entorno faltante o inválida: ADMIN_EMAIL'",
+      "pnpm test",
+      "pnpm build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-10-admin-auth",
+    "files": ["src/server/auth/admin-auth.ts", "src/pages/admin/login.astro", "src/pages/admin/logout.ts", "scripts/admin-set-password.ts", "tests/integration/admin-auth.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T4",
+    "title": "Panel admin: agenda, acciones y bloqueos",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E2-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/admin-panel.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN the admin cancels a confirmed booking THE SYSTEM SHALL set `status` `cancelled`, `cancelled_by` `admin` and deactivate its blocks.",
+      "WHEN the admin marks a cancelled booking as completed THE SYSTEM SHALL return `invalid_transition` and change nothing.",
+      "WHEN a full-day block exists for `2026-09-22` THE SYSTEM SHALL report that day as `blocked` in availability, and as `open` again after the block is deleted.",
+      "WHEN the 30-day horizon from `2026-12-10` reaches 2027 THE SYSTEM SHALL return a holiday warning containing `2027`."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/admin-panel.test.ts",
+      "pnpm test",
+      "pnpm build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-11-admin-panel",
+    "files": ["src/server/admin/agenda.ts", "src/pages/admin/index.astro", "src/pages/admin/reservas/[id].astro", "src/pages/admin/bloqueos.astro", "tests/integration/admin-panel.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T5",
+    "title": "Recordatorios idempotentes y configuración Replit",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E2-T1"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `pnpm test tests/integration/reminders.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN `sendReminders` runs for the first time with two confirmed bookings for tomorrow, one cancelled one and one for the day after THE SYSTEM SHALL send exactly 2 reminders and set `reminder_sent_at` only on those 2.",
+      "WHEN `sendReminders` runs a second time THE SYSTEM SHALL send 0 reminders.",
+      "WHEN `pnpm test tests/unit/replit-config.test.ts` runs THE SYSTEM SHALL confirm `.replit` builds with `pnpm install --frozen-lockfile` and runs `node dist/server/entry.mjs` with `HOST=0.0.0.0` on local port 4321.",
+      "WHEN `pnpm reminders:send` runs twice against `DATABASE_URL` THE SYSTEM SHALL print `\"ok\":true` both times and `\"sent\":0` the second time."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test tests/integration/reminders.test.ts",
+      "pnpm test tests/unit/replit-config.test.ts",
+      "pnpm reminders:send | grep -q '\"ok\":true'",
+      "pnpm reminders:send | grep -q '\"sent\":0'",
+      "test -f README.md",
+      "pnpm test"
+    ],
+    "checkpoint": "step-12-reminders-replit",
+    "files": ["src/server/email/reminders.ts", "scripts/reminders-send.ts", "tests/integration/reminders.test.ts", "tests/unit/replit-config.test.ts", "README.md"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T6",
+    "title": "SEO, aviso de privacidad y página 404",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E1-T6"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `pnpm test:build tests/build/seo.test.ts` runs after `pnpm build` THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN `dist/client/index.html` is read THE SYSTEM SHALL contain one JSON-LD block of `@type` `LocalBusiness` with address `Avenida Kennedy 7666`, `Vitacura`, `CL` and two opening-hours entries.",
+      "WHEN the sitemap is generated THE SYSTEM SHALL list `/` and `/privacidad` and exclude `/admin` and `/reservas`.",
+      "WHEN `dist/client/robots.txt` is read THE SYSTEM SHALL contain `Disallow: /admin` and `Disallow: /reservas/cancelar`.",
+      "WHEN `dist/client/404.html` is read THE SYSTEM SHALL contain `Página no encontrada` and a `noindex` robots meta."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm check",
+      "pnpm test",
+      "pnpm build",
+      "pnpm test:build tests/build/seo.test.ts",
+      "pnpm test:build",
+      "sh scripts/smoke.sh"
+    ],
+    "checkpoint": "step-13-seo-privacy",
+    "files": ["src/pages/privacidad.astro", "src/pages/404.astro", "public/robots.txt", "src/layouts/Base.astro", "tests/build/seo.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T7",
+    "title": "Compuerta final, smoke ampliado y runbook",
+    "epic": "02-operacion-y-lanzamiento",
+    "dependencies": ["E1-T7", "E2-T4", "E2-T5", "E2-T6"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm test:build tests/build/a11y.test.ts` runs after `pnpm build` THE SYSTEM SHALL exit 0 with 0 failed.",
+      "WHEN `sh scripts/smoke.sh` runs THE SYSTEM SHALL get `/api/health` with `\"db\":true`, HTTP 200 from `/` and `/api/disponibilidad`, 404 from an unknown path and from an unknown cancellation token, and 303 from `/admin` without a session.",
+      "WHEN `pnpm gate` runs THE SYSTEM SHALL exit 0, running Biome, `astro check`, `tsc --noEmit`, the unit+integration suite, the build, the build suite and the smoke test.",
+      "WHEN `pnpm install --frozen-lockfile` runs THE SYSTEM SHALL exit 0 without modifying `pnpm-lock.yaml`.",
+      "WHEN `README.md` is read THE SYSTEM SHALL contain the sections `## Recordatorios (Scheduled Deployment)` and `## Lanzamiento`."
+    ],
+    "verify": [
+      "pnpm format",
+      "pnpm install --frozen-lockfile",
+      "pnpm build",
+      "pnpm test:build tests/build/a11y.test.ts",
+      "grep -q '^## Recordatorios (Scheduled Deployment)' README.md",
+      "grep -q '^## Lanzamiento' README.md",
+      "pnpm gate"
+    ],
+    "checkpoint": "step-14-final-gate",
+    "files": ["tests/build/a11y.test.ts", "scripts/smoke.sh", "README.md"],
+    "status": "pending"
+  }
+]
