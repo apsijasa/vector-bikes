@@ -1,0 +1,19 @@
+# Dependencias y salidas de build
+node_modules/
+dist/
+.astro/
+coverage/
+
+# Entorno: nunca se commitean valores reales
+.env
+.env.*
+!.env.example
+
+# Logs y temporales
+*.log
+.DS_Store
+
+# Estado local de Replit y corepack
+.local/
+.cache/
+.config/
