@@ -17,4 +17,13 @@ until curl -s -o /dev/null "$BASE/api/health"; do
 done
 HEALTH="$(curl -s "$BASE/api/health")"
 echo "$HEALTH" | grep -q '"ok":true'
+echo "$HEALTH" | grep -q '"db":true'
+code() { curl -s -o /dev/null -w '%{http_code}' "$BASE$1"; }
+TODAY="$(node -e 'console.log(new Intl.DateTimeFormat("en-CA",{timeZone:"America/Santiago"}).format(new Date()))')"
+test "$(code /)" = 200
+test "$(code "/api/disponibilidad?desde=$TODAY&dias=1&modo=taller")" = 200
+test "$(code /no-existe)" = 404
+test "$(code /admin)" = 303
+test "$(code '/reservas/cancelar?token=no-existe')" = 404
+test "$(code /robots.txt)" = 200
 echo "smoke ok: $HEALTH"

@@ -361,6 +361,6 @@
     ],
     "checkpoint": "step-14-final-gate",
     "files": ["tests/build/a11y.test.ts", "scripts/smoke.sh", "README.md"],
-    "status": "pending"
+    "status": "done"
   }
 ]
