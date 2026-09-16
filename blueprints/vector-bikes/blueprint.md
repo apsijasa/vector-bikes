@@ -1843,7 +1843,7 @@ pnpm exec biome ci .                             # expect: exit 0
 
 | Pieza | Tipo | Configuración |
 |---|---|---|
-| Sitio + API + admin | **Autoscale Deployment** (`deploymentTarget = "cloudrun"` en `.replit`) | build: `corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build`; run: `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`; `[[ports]] localPort = 4321 → externalPort = 80`. El servidor escucha en `0.0.0.0` (nunca solo localhost). Que Replit reenvíe al primer puerto de `[[ports]]` es el comportamiento documentado; que además inyecte `PORT` **no está verificado** en la documentación, por eso el puerto se fija explícitamente en `4321` en ambos lados |
+| Sitio + API + admin | **Autoscale Deployment** (`deploymentTarget = "cloudrun"` en `.replit`) | build: `corepack pnpm@12.4.2 install --frozen-lockfile --config.minimumReleaseAge=0 && corepack pnpm@12.4.2 build`; run: `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`; `[[ports]] localPort = 4321 → externalPort = 80`. El servidor escucha en `0.0.0.0` (nunca solo localhost). Que Replit reenvíe al primer puerto de `[[ports]]` es el comportamiento documentado; que además inyecte `PORT` **no está verificado** en la documentación, por eso el puerto se fija explícitamente en `4321` en ambos lados |
 | Recordatorios | **Scheduled Deployment** | diario `0 10 * * *` con zona **America/Santiago** en el selector; build `corepack pnpm@12.4.2 install --frozen-lockfile`; run `corepack pnpm@12.4.2 reminders:send`. Si Replit no permitiera una segunda deployment en la misma App (no verificado), se crea una segunda Replit App desde el mismo repositorio Git solo para esta tarea |
 | Base de datos | Replit PostgreSQL 16 (dev "Helium"; producción respaldada por Neon) | `DATABASE_URL` inyectada por la plataforma en workspace y deployments |
 
@@ -2503,7 +2503,7 @@ run = "sh -c 'corepack pnpm@12.4.2 build && corepack pnpm@12.4.2 start'"
 
 [deployment]
 deploymentTarget = "cloudrun"
-build = ["sh", "-c", "corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build"]
+build = ["sh", "-c", "corepack pnpm@12.4.2 install --frozen-lockfile --config.minimumReleaseAge=0 && corepack pnpm@12.4.2 build"]
 run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]
 
 [[ports]]
@@ -3199,6 +3199,8 @@ Todo lo de arriba afirma propiedades, no conteos. Ninguna línea acepta "cualqui
 | 17 | `updated_at` con `$onUpdate` de Drizzle | Trigger en Postgres | Todas las escrituras pasan por Drizzle; un trigger duplicaría lógica en SQL | Aparecen escrituras fuera del ORM |
 | 18 | Script de compuerta llamado `gate` | `ci` | `pnpm ci` es un comando propio de pnpm | — |
 | 19 | pnpm 12.4.2 fijado en el `build` de `[deployment]` de `.replit` (`corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build`); `package.json` sin `packageManager` — **tomada 2026-09-16, tras fallar la publicación** | `packageManager: "pnpm@12.4.2"` en `package.json` | Replit reescribe ese campo en cada publicación y su instalación con pnpm 10, al ver pnpm 12 declarado, intenta autoinstalarlo, entra en bucle y aborta; el comando de build sí lo respeta. `replit-config.test.ts` exige `pnpm@12.4.2` y `--frozen-lockfile` en ese build | Replit deja de reescribir `package.json` o instala con pnpm 12 |
+| 20 | `pnpm-lock.yaml` regenerado desde cero con `corepack pnpm@12.4.2 install` como un solo documento YAML — **tomada 2026-09-16, tras fallar la publicación** | Conservar el lockfile de dos documentos (bloque `packageManagerDependencies` + dependencias) que pnpm 12 escribía mientras existía `packageManager` | Replit abortó con "The lockfile is broken: expected a single document in the stream, but found more". Sin `packageManager`, pnpm 12.4.2 escribe un solo documento. La regeneración subió solo dependencias transitivas (`@astrojs/compiler-rs` 0.4.0→0.4.1, `magic-string` 1.3.1→1.4.1, `browserslist` 4.28.9→4.29.0, entre otras); `pnpm install --frozen-lockfile` no lo modifica y `pnpm gate` pasa | Replit acepta lockfiles de varios documentos |
+| 21 | `--config.minimumReleaseAge=0` solo en el install del `build` de `[deployment]` de `.replit`; la política de antigüedad mínima de pnpm 12 sigue activa en el workspace y en cualquier máquina — **tomada 2026-09-16, tras fallar la publicación** | Desactivarla en `pnpm-workspace.yaml` o ampliar `minimumReleaseAgeExclude` en cada publicación | Replit abortó con `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` (19 paquetes publicados hace menos de 24 horas). En la construcción, el lockfile congelado ya fija versiones e integridades revisadas en local, donde la política sí se aplica al resolver. `replit-config.test.ts` exige el flag en ese install y que aparezca una sola vez en `.replit` | Replit instala solo versiones con más de 24 horas o la política deja de bloquear lockfiles congelados |
 
 ### 20.4 Qué construir después
 

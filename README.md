@@ -61,7 +61,7 @@ Pasos para salir a producción, en orden. Ninguno es parte de la compuerta autom
 ### 1. Publicar la Autoscale Deployment
 
 1. Corre `pnpm gate` en el workspace y confirma que sale 0.
-2. *Deployments → Autoscale → Publish*. Replit usa el bloque `[deployment]` de `.replit`: build `corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build` y run `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`.
+2. *Deployments → Autoscale → Publish*. Replit usa el bloque `[deployment]` de `.replit`: build `corepack pnpm@12.4.2 install --frozen-lockfile --config.minimumReleaseAge=0 && corepack pnpm@12.4.2 build` y run `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`.
 
 ### 2. Secretos de producción
 

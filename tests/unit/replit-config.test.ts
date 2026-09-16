@@ -40,6 +40,12 @@ describe(".replit", () => {
     expect(build).toContain("--frozen-lockfile");
   });
 
+  it("relaja minimumReleaseAge solo en el install del build de [deployment]", () => {
+    const build = line(deployment, "build");
+    expect(build).toContain("install --frozen-lockfile --config.minimumReleaseAge=0");
+    expect(replit.match(/minimumReleaseAge/g)).toHaveLength(1);
+  });
+
   it("arranca el servidor standalone en 0.0.0.0:4321", () => {
     const run = line(deployment, "run");
     expect(run).toContain("HOST=0.0.0.0");
