@@ -27,7 +27,7 @@
     ],
     "checkpoint": "step-01-base",
     "files": ["src/styles/global.css", "src/layouts/Base.astro", "src/pages/index.astro", "src/pages/api/health.ts", "scripts/smoke.sh"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T2",

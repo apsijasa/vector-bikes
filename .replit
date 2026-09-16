@@ -8,3 +8,7 @@ run = "corepack pnpm dev"
 deploymentTarget = "cloudrun"
 build = ["sh", "-c", "corepack pnpm install --frozen-lockfile && corepack pnpm build"]
 run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]
+
+[[ports]]
+localPort = 4321
+externalPort = 80

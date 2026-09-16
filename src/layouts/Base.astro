@@ -1,0 +1,35 @@
+---
+import "@fontsource/michroma/400.css";
+import "@fontsource-variable/archivo/index.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  noindex?: boolean;
+}
+
+const { title, description, path, noindex = false } = Astro.props;
+const canonical = new URL(path, Astro.site).href;
+---
+
+<!doctype html>
+<html lang="es-CL">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="icon" type="image/png" href="/brand/vector-bikes-logo.png" />
+  </head>
+  <body>
+    <a class="skip" href="#contenido">Saltar al contenido</a>
+    <main id="contenido"><slot /></main>
+  </body>
+</html>
