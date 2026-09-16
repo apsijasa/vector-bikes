@@ -282,7 +282,7 @@
     ],
     "checkpoint": "step-11-admin-panel",
     "files": ["src/server/admin/agenda.ts", "src/pages/admin/index.astro", "src/pages/admin/reservas/[id].astro", "src/pages/admin/bloqueos.astro", "tests/integration/admin-panel.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T5",
