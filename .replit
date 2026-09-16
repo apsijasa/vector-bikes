@@ -6,7 +6,7 @@ run = "sh -c 'corepack pnpm build && corepack pnpm start'"
 
 [deployment]
 deploymentTarget = "cloudrun"
-build = ["sh", "-c", "corepack pnpm install --frozen-lockfile && corepack pnpm build"]
+build = ["sh", "-c", "corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build"]
 run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]
 
 [[ports]]

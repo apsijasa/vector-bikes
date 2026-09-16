@@ -23,7 +23,7 @@ Sitio y reservas en línea del taller de bicicletas Vector Bikes (Av. Kennedy 76
 
 **Compuerta:** `pnpm gate` pasa antes de marcar cualquier tarea como hecha y antes de publicar. Antes de cada Verify, `pnpm format`.
 
-Node 24 (`.nvmrc`), pnpm 12.4.2 (`packageManager`). Las versiones exactas están en `pnpm-lock.yaml`: léelo, no adivines.
+Node 24 (`.nvmrc`), pnpm 12.4.2. La versión de pnpm se fija en el `build` de `[deployment]` en `.replit` (`corepack pnpm@12.4.2 …`), no en `packageManager`: Replit reescribe `package.json` al publicar y, si el campo existe, su instalación con pnpm 10 intenta autoinstalar pnpm 12 y aborta. No agregues `packageManager` a `package.json`. Las versiones exactas están en `pnpm-lock.yaml`: léelo, no adivines.
 
 ## Estado del build
 

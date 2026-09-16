@@ -3191,6 +3191,7 @@ Todo lo de arriba afirma propiedades, no conteos. Ninguna línea acepta "cualqui
 | 16 | `security.checkOrigin: false` + chequeo propio contra `PUBLIC_SITE_URL` | Chequeo nativo de Astro | Detrás del proxy TLS de Replit compararía orígenes distintos | Astro confía en cabeceras reenviadas de forma documentada |
 | 17 | `updated_at` con `$onUpdate` de Drizzle | Trigger en Postgres | Todas las escrituras pasan por Drizzle; un trigger duplicaría lógica en SQL | Aparecen escrituras fuera del ORM |
 | 18 | Script de compuerta llamado `gate` | `ci` | `pnpm ci` es un comando propio de pnpm | — |
+| 19 | pnpm 12.4.2 fijado en el `build` de `[deployment]` de `.replit` (`corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build`); `package.json` sin `packageManager` — **tomada 2026-09-16, tras fallar la publicación** | `packageManager: "pnpm@12.4.2"` en `package.json` | Replit reescribe ese campo en cada publicación y su instalación con pnpm 10, al ver pnpm 12 declarado, intenta autoinstalarlo, entra en bucle y aborta; el comando de build sí lo respeta. `replit-config.test.ts` exige `pnpm@12.4.2` y `--frozen-lockfile` en ese build | Replit deja de reescribir `package.json` o instala con pnpm 12 |
 
 ### 20.4 Qué construir después
 

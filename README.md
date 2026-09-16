@@ -6,6 +6,8 @@ Sitio y reservas en línea del taller de bicicletas Vector Bikes (Av. Kennedy 76
 
 Requisitos: Node 24 (`.nvmrc`; mínimo 22.12) y pnpm 12.4.2 activado con corepack.
 
+`package.json` no lleva el campo `packageManager`: Replit lo reescribe al publicar y, si existe, su instalación con pnpm 10 intenta autoinstalar pnpm 12 y aborta. La versión se fija donde manda, en el `build` de `[deployment]` en `.replit` (`corepack pnpm@12.4.2 …`); no vuelvas a agregar el campo.
+
 1. En la Replit App elige **Node.js 24** en el selector de lenguaje/módulo.
 2. Activa pnpm: `corepack enable` (con `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`) y comprueba `pnpm --version` → `12.4.2`.
 3. Instala: `pnpm install --frozen-lockfile`.
@@ -39,8 +41,8 @@ Configúralo así en Replit:
 
 1. *Deployments → Create → Scheduled*.
 2. Programación diaria a las 10:00: cron `0 10 * * *`, eligiendo **America/Santiago** en el selector de zona horaria.
-3. Comando de build: `corepack pnpm install --frozen-lockfile`.
-4. Comando de ejecución: `corepack pnpm reminders:send`.
+3. Comando de build: `corepack pnpm@12.4.2 install --frozen-lockfile`.
+4. Comando de ejecución: `corepack pnpm@12.4.2 reminders:send`.
 5. Secretos de esa deployment (cada deployment tiene los suyos):
    - `DATABASE_URL` (la de producción)
    - `EMAIL_TRANSPORT=resend`
@@ -59,7 +61,7 @@ Pasos para salir a producción, en orden. Ninguno es parte de la compuerta autom
 ### 1. Publicar la Autoscale Deployment
 
 1. Corre `pnpm gate` en el workspace y confirma que sale 0.
-2. *Deployments → Autoscale → Publish*. Replit usa el bloque `[deployment]` de `.replit`: build `corepack pnpm install --frozen-lockfile && corepack pnpm build` y run `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`.
+2. *Deployments → Autoscale → Publish*. Replit usa el bloque `[deployment]` de `.replit`: build `corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build` y run `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`.
 
 ### 2. Secretos de producción
 

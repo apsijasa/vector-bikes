@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 const replit = readFileSync(".replit", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
-  packageManager?: string;
   scripts?: Record<string, string>;
 };
 
@@ -31,8 +30,14 @@ describe(".replit", () => {
     expect(replit).toContain("[deployment]");
     expect(line(deployment, "deploymentTarget")).toContain('"cloudrun"');
     const build = line(deployment, "build");
-    expect(build).toContain("pnpm install --frozen-lockfile");
-    expect(build).toContain("pnpm build");
+    expect(build).toContain("pnpm@12.4.2 install --frozen-lockfile");
+    expect(build).toContain("pnpm@12.4.2 build");
+  });
+
+  it("fija pnpm 12.4.2 en el build, porque Replit reescribe package.json al publicar", () => {
+    const build = line(deployment, "build");
+    expect(build).toContain("pnpm@12.4.2");
+    expect(build).toContain("--frozen-lockfile");
   });
 
   it("arranca el servidor standalone en 0.0.0.0:4321", () => {
@@ -44,8 +49,7 @@ describe(".replit", () => {
 });
 
 describe("package.json", () => {
-  it("fija pnpm y los scripts que usan Replit y la tarea programada", () => {
-    expect(pkg.packageManager).toBe("pnpm@12.4.2");
+  it("define los scripts que usan Replit y la tarea programada", () => {
     expect(pkg.scripts?.start).toContain("node dist/server/entry.mjs");
     expect(pkg.scripts?.["reminders:send"]).toBe(
       "node --env-file-if-exists=.env scripts/reminders-send.ts",
