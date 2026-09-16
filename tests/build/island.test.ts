@@ -24,6 +24,13 @@ describe("isla de reserva construida", () => {
     expect(bundle).toContain("Demasiados intentos. Espera unos minutos e intenta de nuevo.");
   });
 
+  it("el bundle construido carga Turnstile con render explícito y callback onload", () => {
+    const island = /<astro-island[^>]*component-url="([^"]+)"/.exec(html)?.[1] ?? "";
+    const bundle = readFileSync(`dist/client${island}`, "utf8");
+    expect(bundle).toContain("render=explicit&onload=onloadTurnstileCallback");
+    expect(bundle).toContain("No pudimos cargar la verificación anti-spam.");
+  });
+
   it("muestra el ticket y el botón de envío", () => {
     expect(html).toContain("Orden de reserva");
     expect(html).toContain("Confirmar reserva");

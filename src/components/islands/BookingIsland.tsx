@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef } from "preact/hooks";
 import { BookingFields, FIELD_IDS } from "./BookingFields.tsx";
 import { BLOCK_FIELDSET_ID, BlockFieldset, DayFieldset, ModeFieldset } from "./BookingSchedule.tsx";
 import { BookingTicket } from "./BookingTicket.tsx";
+import { useTurnstile } from "./turnstile.ts";
 import {
   type ApiDay,
   type BookingResult,
@@ -17,27 +18,7 @@ import {
   validateForm,
 } from "./booking-state.ts";
 
-type TurnstileApi = {
-  render: (
-    element: HTMLElement,
-    options: {
-      sitekey: string;
-      language: string;
-      callback: (token: string) => void;
-      "expired-callback": () => void;
-    },
-  ) => void;
-  reset: () => void;
-};
-
-declare global {
-  interface Window {
-    turnstile?: TurnstileApi;
-  }
-}
-
 const TIMEZONE = "America/Santiago";
-const TURNSTILE_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
 function todayInSantiago(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE }).format(new Date());
@@ -48,6 +29,9 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
   const today = useMemo(todayInSantiago, []);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const turnstile = useTurnstile(siteKey, turnstileRef, (token) =>
+    dispatch({ type: "setTurnstile", token }),
+  );
 
   const days = state.availability.status === "ready" ? state.availability.days : [];
   const day = days.find((item) => item.date === state.selectedDate);
@@ -74,31 +58,6 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
     void loadAvailability(state.mode);
   }, [state.mode]);
 
-  useEffect(() => {
-    if (siteKey === "") {
-      return;
-    }
-    const mount = () => {
-      if (window.turnstile && turnstileRef.current) {
-        window.turnstile.render(turnstileRef.current, {
-          sitekey: siteKey,
-          language: "es",
-          callback: (token) => dispatch({ type: "setTurnstile", token }),
-          "expired-callback": () => dispatch({ type: "setTurnstile", token: null }),
-        });
-      }
-    };
-    if (window.turnstile) {
-      mount();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = TURNSTILE_SRC;
-    script.async = true;
-    script.addEventListener("load", mount);
-    document.head.append(script);
-  }, [siteKey]);
-
   /** Foco y desplazamiento al primer error; el bloque lleva a la regla de horarios. */
   function revealFirstError(errors: FormErrors): void {
     const target = firstErrorTarget(errors);
@@ -122,7 +81,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
     scrollTo?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
   }
 
-  function requestBody(): string {
+  function requestBody(turnstileToken: string): string {
     return JSON.stringify({
       mode: state.mode,
       service_date: state.selectedDate,
@@ -134,7 +93,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       descripcion: state.form.descripcion.trim(),
       ...(isPickup ? { comuna: state.form.comuna, direccion: state.form.direccion.trim() } : {}),
       consentimiento: state.form.consentimiento,
-      turnstile_token: state.turnstileToken ?? "",
+      turnstile_token: turnstileToken,
     });
   }
 
@@ -150,12 +109,18 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       revealFirstError(errors);
       return;
     }
+    // Sin widget o sin token no se envía: el servidor respondería 403 de todos modos.
+    const token = state.turnstileToken ?? turnstile.token();
+    if (turnstile.enabled && token === null) {
+      dispatch({ type: "turnstileUnavailable" });
+      return;
+    }
     dispatch({ type: "submitStart" });
     try {
       const response = await fetch("/api/reservas", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: requestBody(),
+        body: requestBody(token ?? ""),
       });
       // Se lee como texto: si el cuerpo no es JSON (HTML de un proxy), el estado HTTP sigue
       // eligiendo el mensaje en vez de caer al error de red.
@@ -171,7 +136,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
         body,
         diag: String(response.status),
       });
-      window.turnstile?.reset();
+      turnstile.reset();
       if (response.status === 422) {
         revealFirstError(formErrorsFrom(body.fields ?? {}));
       }
@@ -182,7 +147,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       // TEMPORAL: `diag` con el error capturado (fetch u otra excepción); quitar tras el diagnóstico.
       const diag = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       dispatch({ type: "submitFailed", status: 0, body: {}, diag });
-      window.turnstile?.reset();
+      turnstile.reset();
     }
   }
 

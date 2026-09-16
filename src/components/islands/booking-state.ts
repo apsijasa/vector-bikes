@@ -51,6 +51,7 @@ export type Action =
   | { type: "selectStart"; start: string }
   | { type: "setField"; field: keyof FormValues; value: string | boolean }
   | { type: "setTurnstile"; token: string | null }
+  | { type: "turnstileUnavailable" }
   | { type: "submitStart" }
   | { type: "submitSuccess"; result: BookingResult }
   | {
@@ -67,6 +68,8 @@ const MESSAGES = {
   network: "No pudimos confirmar tu reserva. Intenta de nuevo en un momento.",
   block: "Elige un bloque libre para continuar.",
   fields: "Revisa los campos marcados y vuelve a intentar.",
+  turnstileLoad:
+    "No pudimos cargar la verificación anti-spam. Recarga la página e intenta de nuevo.",
 } as const;
 
 export type FormErrors = Partial<Record<keyof FormValues | "bloque", string>>;
@@ -222,6 +225,12 @@ export function bookingReducer(state: State, action: Action): State {
       };
     case "setTurnstile":
       return { ...state, turnstileToken: action.token };
+    case "turnstileUnavailable":
+      return {
+        ...state,
+        turnstileToken: null,
+        submit: { status: "failed", message: MESSAGES.turnstileLoad },
+      };
     case "submitStart":
       return { ...state, submit: { status: "submitting", message: null }, errors: {} };
     case "submitSuccess":
