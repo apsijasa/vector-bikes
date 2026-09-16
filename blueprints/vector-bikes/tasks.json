@@ -335,7 +335,7 @@
     ],
     "checkpoint": "step-13-seo-privacy",
     "files": ["src/pages/privacidad.astro", "src/pages/404.astro", "public/robots.txt", "src/layouts/Base.astro", "tests/build/seo.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T7",

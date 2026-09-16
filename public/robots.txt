@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /admin
+Disallow: /reservas/cancelar
+Sitemap: https://vectorbikes.cl/sitemap-index.xml
