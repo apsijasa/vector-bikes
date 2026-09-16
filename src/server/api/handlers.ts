@@ -1,0 +1,340 @@
+import { createHmac } from "node:crypto";
+import { and, between, eq, gt, ne, sql } from "drizzle-orm";
+import { DateTime } from "luxon";
+import { z } from "zod";
+import { getHashEnv, getTurnstileEnv } from "../../lib/env.ts";
+import { errorMessage, log } from "../../lib/log.ts";
+import { createBooking } from "../booking/create-booking.ts";
+import { DAILY_CAPACITY, TIMEZONE } from "../booking/rules.ts";
+import { addDays, computeDay, localToday } from "../booking/slots.ts";
+import type { AppDb } from "../db/client.ts";
+import {
+  type Booking,
+  blockedPeriods,
+  bookingBlocks,
+  bookingRequests,
+  bookings,
+} from "../db/schema.ts";
+import { verifyTurnstile } from "./turnstile.ts";
+
+export type HandlerContext = {
+  db: AppDb;
+  now: Date;
+  ip: string | null;
+  fetchFn?: typeof fetch;
+  onCreated?: (booking: Booking, cancelToken: string) => Promise<void>;
+};
+
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_MINUTES = 10;
+
+const MESSAGES = {
+  validation: "Revisa los datos del formulario.",
+  turnstile: "No pudimos verificar que eres una persona. Vuelve a intentar.",
+  slot: "El bloque ya no está disponible",
+  phone:
+    "Ya tienes una reserva próxima con este teléfono. Cancélala desde tu correo para reservar otra.",
+  rate: "Demasiados intentos desde tu conexión. Vuelve a intentar en 10 minutos.",
+  internal: "Algo falló de nuestro lado. Vuelve a intentar en unos minutos.",
+} as const;
+
+export function jsonResponse(
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...headers,
+    },
+  });
+}
+
+export function errorResponse(
+  status: number,
+  code: string,
+  error: string,
+  fields?: Record<string, string>,
+  headers?: Record<string, string>,
+): Response {
+  return jsonResponse(status, fields ? { error, code, fields } : { error, code }, headers);
+}
+
+/** Primer valor de `x-forwarded-for`; si no hay, la IP que entrega el servidor. */
+export function clientIp(request: Request, fallback: string | null): string | null {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const first = forwarded?.split(",")[0]?.trim();
+  return first && first.length > 0 ? first : fallback;
+}
+
+/** La IP nunca se guarda en claro. */
+export function hashIp(ip: string | null): string | null {
+  if (ip === null) {
+    return null;
+  }
+  return createHmac("sha256", getHashEnv().SESSION_SECRET).update(ip).digest("hex");
+}
+
+/** `569XXXXXXXX` u `9XXXXXXXX` → `+569XXXXXXXX`; cualquier otra forma es inválida. */
+export function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("569")) {
+    return `+${digits}`;
+  }
+  if (digits.length === 9 && digits.startsWith("9")) {
+    return `+56${digits}`;
+  }
+  return null;
+}
+
+function fieldsOf(error: z.ZodError): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = String(issue.path[0] ?? "formulario");
+    fields[key] ??= issue.message;
+  }
+  return fields;
+}
+
+const availabilitySchema = z.object({
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Elige un día."),
+  dias: z.coerce
+    .number()
+    .int("Pide entre 1 y 31 días.")
+    .min(1, "Pide entre 1 y 31 días.")
+    .max(31, "Pide entre 1 y 31 días.")
+    .default(14),
+  modo: z.enum(["taller", "retiro"], "Elige taller o retiro.").default("taller"),
+});
+
+const bookingSchema = z
+  .strictObject({
+    mode: z.enum(["taller", "retiro"], "Elige cómo nos entregas la bici."),
+    service_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Elige un día."),
+    start: z.string().regex(/^\d{2}:(00|30)$/, "Elige un bloque."),
+    nombre: z.string().trim().min(2, "Escribe tu nombre.").max(80, "Escribe tu nombre."),
+    telefono: z
+      .string()
+      .refine(
+        (value) => normalizePhone(value) !== null,
+        "Ingresa un celular chileno, por ejemplo +56 9 1234 5678.",
+      ),
+    correo: z
+      .email("Escribe un correo válido, por ejemplo nombre@correo.cl.")
+      .max(254, "Escribe un correo válido, por ejemplo nombre@correo.cl."),
+    bicicleta: z
+      .string()
+      .trim()
+      .min(2, "Cuéntanos la marca y el tipo de bici.")
+      .max(120, "Cuéntanos la marca y el tipo de bici."),
+    descripcion: z
+      .string()
+      .trim()
+      .min(5, "Cuéntanos qué necesita tu bici.")
+      .max(1000, "Cuéntanos qué necesita tu bici."),
+    comuna: z.enum(["Vitacura", "Las Condes"], "Elige Vitacura o Las Condes.").nullish(),
+    direccion: z.string().trim().min(5).max(200).nullish(),
+    consentimiento: z.literal(true, "Acepta el aviso de privacidad para confirmar."),
+    turnstile_token: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const isPickup = value.mode === "retiro";
+    if (isPickup && !value.comuna) {
+      ctx.addIssue({ code: "custom", path: ["comuna"], message: "Elige Vitacura o Las Condes." });
+    }
+    if (isPickup && !value.direccion) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["direccion"],
+        message: "Escribe la dirección de retiro.",
+      });
+    }
+    if (!isPickup && value.comuna) {
+      ctx.addIssue({ code: "custom", path: ["comuna"], message: "Elige Vitacura o Las Condes." });
+    }
+    if (!isPickup && value.direccion) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["direccion"],
+        message: "Escribe la dirección de retiro.",
+      });
+    }
+  });
+
+/** Bloques activos, bloqueos y conteo por fecha para todo el rango, en tres consultas. */
+async function readRange(db: AppDb, from: string, to: string) {
+  const blocks = await db
+    .select({ serviceDate: bookingBlocks.serviceDate, blockStart: bookingBlocks.blockStart })
+    .from(bookingBlocks)
+    .where(and(eq(bookingBlocks.isActive, true), between(bookingBlocks.serviceDate, from, to)));
+  const blocked = await db
+    .select({
+      serviceDate: blockedPeriods.serviceDate,
+      startTime: blockedPeriods.startTime,
+      endTime: blockedPeriods.endTime,
+    })
+    .from(blockedPeriods)
+    .where(between(blockedPeriods.serviceDate, from, to));
+  const used = await db
+    .select({ serviceDate: bookings.serviceDate, n: sql<number>`count(*)` })
+    .from(bookings)
+    .where(and(between(bookings.serviceDate, from, to), ne(bookings.status, "cancelled")))
+    .groupBy(bookings.serviceDate);
+
+  return { blocks, blocked, used };
+}
+
+export async function handleAvailability(url: URL, ctx: HandlerContext): Promise<Response> {
+  const parsed = availabilitySchema.safeParse({
+    desde: url.searchParams.get("desde") ?? undefined,
+    dias: url.searchParams.get("dias") ?? undefined,
+    modo: url.searchParams.get("modo") ?? undefined,
+  });
+  if (!parsed.success) {
+    return errorResponse(422, "validation_error", MESSAGES.validation, fieldsOf(parsed.error));
+  }
+  const { desde, dias, modo } = parsed.data;
+  if (desde < localToday(ctx.now)) {
+    return errorResponse(422, "validation_error", MESSAGES.validation, {
+      desde: "Elige una fecha de hoy en adelante.",
+    });
+  }
+
+  const dates = Array.from({ length: dias }, (_, index) => addDays(desde, index));
+  const last = dates.at(-1) ?? desde;
+  const { blocks, blocked, used } = await readRange(ctx.db, desde, last);
+
+  const days = dates.map((date) =>
+    computeDay({
+      date,
+      mode: modo,
+      now: ctx.now,
+      activeBlockStarts: blocks
+        .filter((row) => row.serviceDate === date)
+        .map((row) => row.blockStart.slice(0, 5)),
+      blocked: blocked
+        .filter((row) => row.serviceDate === date)
+        .map((row) => ({
+          startTime: row.startTime === null ? null : row.startTime.slice(0, 5),
+          endTime: row.endTime === null ? null : row.endTime.slice(0, 5),
+        })),
+      usedCount: Number(used.find((row) => row.serviceDate === date)?.n ?? 0),
+    }),
+  );
+
+  return jsonResponse(200, { timezone: TIMEZONE, modo, capacity: DAILY_CAPACITY, days });
+}
+
+/** Cuenta y registra el intento. Devuelve la respuesta 429 cuando la IP se pasó del límite. */
+async function enforceRateLimit(ctx: HandlerContext): Promise<Response | null> {
+  const ipHash = hashIp(ctx.ip) ?? hashIp("sin-ip-conocida");
+  if (ipHash === null) {
+    return null;
+  }
+  const since = new Date(ctx.now.getTime() - RATE_LIMIT_MINUTES * 60_000);
+  const [row] = await ctx.db
+    .select({ n: sql<number>`count(*)` })
+    .from(bookingRequests)
+    .where(and(eq(bookingRequests.ipHash, ipHash), gt(bookingRequests.createdAt, since)));
+  if (Number(row?.n ?? 0) >= RATE_LIMIT_MAX) {
+    return errorResponse(429, "rate_limited", MESSAGES.rate, undefined, {
+      "Retry-After": String(RATE_LIMIT_MINUTES * 60),
+    });
+  }
+  await ctx.db.insert(bookingRequests).values({ ipHash, createdAt: ctx.now });
+  return null;
+}
+
+function localHhmm(instant: Date): string {
+  return DateTime.fromJSDate(instant).setZone(TIMEZONE).toFormat("HH:mm");
+}
+
+export async function handleCreateBooking(
+  request: Request,
+  ctx: HandlerContext,
+): Promise<Response> {
+  try {
+    const limited = await enforceRateLimit(ctx);
+    if (limited) {
+      return limited;
+    }
+
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return errorResponse(422, "validation_error", MESSAGES.validation, {
+        formulario: "No pudimos leer el formulario.",
+      });
+    }
+    const parsed = bookingSchema.safeParse(raw);
+    if (!parsed.success) {
+      return errorResponse(422, "validation_error", MESSAGES.validation, fieldsOf(parsed.error));
+    }
+    const data = parsed.data;
+
+    const token = data.turnstile_token ?? "";
+    const human =
+      token.length > 0 &&
+      (await verifyTurnstile({
+        token,
+        ip: ctx.ip,
+        secret: getTurnstileEnv().TURNSTILE_SECRET_KEY,
+        fetchFn: ctx.fetchFn,
+      }));
+    if (!human) {
+      return errorResponse(403, "turnstile_failed", MESSAGES.turnstile);
+    }
+
+    const phone = normalizePhone(data.telefono);
+    if (phone === null) {
+      return errorResponse(422, "validation_error", MESSAGES.validation, {
+        telefono: "Ingresa un celular chileno, por ejemplo +56 9 1234 5678.",
+      });
+    }
+
+    const result = await createBooking(
+      ctx.db,
+      {
+        mode: data.mode,
+        serviceDate: data.service_date,
+        start: data.start,
+        customerName: data.nombre,
+        phoneE164: phone,
+        email: data.correo.toLowerCase(),
+        bike: data.bicicleta,
+        description: data.descripcion,
+        comuna: data.comuna ?? null,
+        address: data.direccion ?? null,
+        ipHash: hashIp(ctx.ip),
+      },
+      ctx.now,
+    );
+    if (!result.ok) {
+      const message = result.code === "phone_limit" ? MESSAGES.phone : MESSAGES.slot;
+      return errorResponse(409, result.code, message);
+    }
+
+    const { booking } = result;
+    try {
+      await ctx.onCreated?.(booking, result.cancelToken);
+    } catch (error) {
+      log.error("email.failed", { code: booking.code, message: errorMessage(error) });
+    }
+
+    return jsonResponse(201, {
+      code: booking.code,
+      service_date: booking.serviceDate,
+      start: localHhmm(booking.startsAt),
+      end: localHhmm(booking.endsAt),
+      mode: booking.mode,
+      fee: booking.pickupFeeClp,
+    });
+  } catch (error) {
+    log.error("reservas.internal_error", { message: errorMessage(error) });
+    return errorResponse(500, "internal_error", MESSAGES.internal);
+  }
+}

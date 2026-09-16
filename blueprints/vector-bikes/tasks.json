@@ -130,7 +130,7 @@
     ],
     "checkpoint": "step-05-public-api",
     "files": ["src/server/api/turnstile.ts", "src/server/api/handlers.ts", "src/pages/api/disponibilidad.ts", "src/pages/api/reservas.ts", "tests/integration/api.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T6",
