@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { and, between, eq, gt, ne, sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { z } from "zod";
-import { getHashEnv, getTurnstileEnv } from "../../lib/env.ts";
+import { getHashEnv, getSiteEnv, getTurnstileEnv } from "../../lib/env.ts";
 import { errorMessage, log } from "../../lib/log.ts";
 import { createBooking } from "../booking/create-booking.ts";
 import { DAILY_CAPACITY, TIMEZONE } from "../booking/rules.ts";
@@ -61,6 +61,25 @@ export function errorResponse(
   headers?: Record<string, string>,
 ): Response {
   return jsonResponse(status, fields ? { error, code, fields } : { error, code }, headers);
+}
+
+/**
+ * Todo POST con efecto exige `Origin` igual al origin de `PUBLIC_SITE_URL`.
+ * `security.checkOrigin` de Astro está desactivado por el proxy de Replit; esta es la defensa CSRF.
+ */
+export function isAllowedOrigin(
+  request: Request,
+  siteUrl: string = getSiteEnv().PUBLIC_SITE_URL,
+): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin || origin === "null") {
+    return false;
+  }
+  try {
+    return new URL(origin).origin === new URL(siteUrl).origin;
+  } catch {
+    return false;
+  }
 }
 
 /** Primer valor de `x-forwarded-for`; si no hay, la IP que entrega el servidor. */

@@ -231,7 +231,7 @@
     ],
     "checkpoint": "step-09-cancellation",
     "files": ["src/server/api/handlers.ts", "src/server/booking/cancel-flow.ts", "src/pages/reservas/cancelar.astro", "tests/integration/cancel-flow.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T3",
