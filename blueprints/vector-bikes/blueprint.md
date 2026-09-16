@@ -1509,7 +1509,7 @@ git tag step-11-admin-panel
 - `scripts/reminders-send.ts` — `const result = await sendReminders(getDb(), new Date())`; imprime `{"ok":<failed === 0>,"sent":<n>,"failed":<m>}`; `process.exit(result.failed === 0 ? 0 : 1)` (el `exit` explícito cierra el pool de `postgres`); excepción → mensaje a stderr y `process.exit(1)`.
 - `tests/integration/reminders.test.ts` — PGlite, `consoleOutbox` vacío, reservas creadas con `now = 2026-09-15T13:00:00.000Z` (10:00 local) y teléfonos distintos: A `taller` `2026-09-16` `15:00`, B `retiro` `2026-09-16` `17:00`, C `taller` `2026-09-16` `18:00` luego cancelada, D `taller` `2026-09-17` `15:00`. Primera `sendReminders(db, now)` → `{ sent: 2, failed: 0 }`, 2 mensajes con asunto que empieza con `Recordatorio:`, y `reminder_sent_at` no nulo en A y B y nulo en C y D. Segunda llamada → `{ sent: 0, failed: 0 }` y `consoleOutbox` sigue con 2 mensajes.
 - `tests/unit/replit-config.test.ts` — lee `.replit` y `package.json`: `.replit` contiene `[deployment]`, `deploymentTarget = "cloudrun"`, una línea `build` que contiene `pnpm@12.4.2 install --frozen-lockfile` y `pnpm@12.4.2 build`, una línea `run` que contiene `HOST=0.0.0.0` y `node dist/server/entry.mjs`, y `localPort = 4321`; `package.json` tiene `scripts.start` que contiene `node dist/server/entry.mjs`, y `scripts["reminders:send"]` igual a `node --env-file-if-exists=.env scripts/reminders-send.ts`.
-- `README.md` — crear con secciones: `# Vector Bikes`; `## Desarrollo` (Bootstrap de §10 resumido, `pnpm dev` en el puerto 4321, `pnpm gate` como compuerta); `## Base de datos` (crear la base en la herramienta *Database* del workspace; `pnpm db:generate`, `pnpm db:migrate` y `pnpm db:check` solo contra la base del workspace; al publicar, Replit propaga el esquema a producción; la app nunca migra); `## Recordatorios (Scheduled Deployment)` con los pasos exactos: *Deployments → Create → Scheduled*; programación diaria a las 10:00 (cron `0 10 * * *`) eligiendo **America/Santiago** en el selector de zona horaria; comando de build `corepack pnpm install --frozen-lockfile`; comando de ejecución `corepack pnpm reminders:send`; secretos de esa deployment: `DATABASE_URL` (la de producción), `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `SHOP_NOTIFY_EMAIL`, `PUBLIC_SITE_URL`; y la nota: *si Replit no permite una segunda deployment en la misma App, crear una segunda Replit App importando el mismo repositorio Git solo para esta tarea programada*.
+- `README.md` — crear con secciones: `# Vector Bikes`; `## Desarrollo` (Bootstrap de §10 resumido, `pnpm dev` en el puerto 4321, `pnpm gate` como compuerta); `## Base de datos` (crear la base en la herramienta *Database* del workspace; `pnpm db:generate`, `pnpm db:migrate` y `pnpm db:check` solo contra la base del workspace; al publicar, Replit propaga el esquema a producción; la app nunca migra); `## Recordatorios (Scheduled Deployment)` con los pasos exactos: *Deployments → Create → Scheduled*; programación diaria a las 10:00 (cron `0 10 * * *`) eligiendo **America/Santiago** en el selector de zona horaria; comando de build `corepack pnpm@12.4.2 install --frozen-lockfile`; comando de ejecución `corepack pnpm@12.4.2 reminders:send`; secretos de esa deployment: `DATABASE_URL` (la de producción), `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `SHOP_NOTIFY_EMAIL`, `PUBLIC_SITE_URL`; y la nota: *si Replit no permite una segunda deployment en la misma App, crear una segunda Replit App importando el mismo repositorio Git solo para esta tarea programada*.
 
 **Done when**
 - [ ] WHEN `pnpm test tests/integration/reminders.test.ts` runs THE SYSTEM SHALL exit 0 with 0 failed.
@@ -1843,8 +1843,8 @@ pnpm exec biome ci .                             # expect: exit 0
 
 | Pieza | Tipo | Configuración |
 |---|---|---|
-| Sitio + API + admin | **Autoscale Deployment** (`deploymentTarget = "cloudrun"` en `.replit`) | build: `corepack pnpm install --frozen-lockfile && corepack pnpm build`; run: `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`; `[[ports]] localPort = 4321 → externalPort = 80`. El servidor escucha en `0.0.0.0` (nunca solo localhost). Que Replit reenvíe al primer puerto de `[[ports]]` es el comportamiento documentado; que además inyecte `PORT` **no está verificado** en la documentación, por eso el puerto se fija explícitamente en `4321` en ambos lados |
-| Recordatorios | **Scheduled Deployment** | diario `0 10 * * *` con zona **America/Santiago** en el selector; build `corepack pnpm install --frozen-lockfile`; run `corepack pnpm reminders:send`. Si Replit no permitiera una segunda deployment en la misma App (no verificado), se crea una segunda Replit App desde el mismo repositorio Git solo para esta tarea |
+| Sitio + API + admin | **Autoscale Deployment** (`deploymentTarget = "cloudrun"` en `.replit`) | build: `corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build`; run: `HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs`; `[[ports]] localPort = 4321 → externalPort = 80`. El servidor escucha en `0.0.0.0` (nunca solo localhost). Que Replit reenvíe al primer puerto de `[[ports]]` es el comportamiento documentado; que además inyecte `PORT` **no está verificado** en la documentación, por eso el puerto se fija explícitamente en `4321` en ambos lados |
+| Recordatorios | **Scheduled Deployment** | diario `0 10 * * *` con zona **America/Santiago** en el selector; build `corepack pnpm@12.4.2 install --frozen-lockfile`; run `corepack pnpm@12.4.2 reminders:send`. Si Replit no permitiera una segunda deployment en la misma App (no verificado), se crea una segunda Replit App desde el mismo repositorio Git solo para esta tarea |
 | Base de datos | Replit PostgreSQL 16 (dev "Helium"; producción respaldada por Neon) | `DATABASE_URL` inyectada por la plataforma en workspace y deployments |
 
 Salida del build: `dist/server/entry.mjs` (servidor) y `dist/client/` (estáticos y páginas prerenderizadas).
@@ -2068,7 +2068,7 @@ Sitio y reservas en línea del taller de bicicletas Vector Bikes (Av. Kennedy 76
 
 **Compuerta:** `pnpm gate` pasa antes de marcar cualquier tarea como hecha y antes de publicar. Antes de cada Verify, `pnpm format`.
 
-Node 24 (`.nvmrc`), pnpm 12.4.2 (`packageManager`). Las versiones exactas están en `pnpm-lock.yaml`: léelo, no adivines.
+Node 24 (`.nvmrc`), pnpm 12.4.2. La versión de pnpm se fija en el `build` de `[deployment]` en `.replit` (`corepack pnpm@12.4.2 …`), no en `packageManager`: Replit reescribe `package.json` al publicar y, si el campo existe, su instalación con pnpm 10 intenta autoinstalar pnpm 12 y aborta. No agregues `packageManager` a `package.json`. Las versiones exactas están en `pnpm-lock.yaml`: léelo, no adivines.
 
 ## Estado del build
 
@@ -2499,16 +2499,24 @@ Cada archivo que un `Verify` de §9 necesita para ejecutarse existe como archivo
 # VERIFICAR ANTES DE INSTALAR: el nombre del módulo de Node 24 no está confirmado en la documentación.
 # Si Replit lo cambia al elegir Node 24 en el selector de lenguaje/módulo, se acepta su valor.
 modules = ["nodejs-24"]
-run = "corepack pnpm dev"
+run = "sh -c 'corepack pnpm@12.4.2 build && corepack pnpm@12.4.2 start'"
+
+[deployment]
+deploymentTarget = "cloudrun"
+build = ["sh", "-c", "corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build"]
+run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]
 
 [[ports]]
 localPort = 4321
 externalPort = 80
 
-[deployment]
-deploymentTarget = "cloudrun"
-build = ["sh", "-c", "corepack pnpm install --frozen-lockfile && corepack pnpm build"]
-run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]
+[packager]
+afterInstall = ""
+
+[packager.features]
+enabledForHosting = false
+guessImports = false
+packageSearch = false
 ```
 
 `.nvmrc`:
@@ -3140,7 +3148,7 @@ Todo lo de arriba afirma propiedades, no conteos. Ninguna línea acepta "cualqui
 - [ ] **Lanzamiento — Replit:** Autoscale Deployment publicada; *Secrets* de producción cargados en la Autoscale **y** en la Scheduled Deployment (`DATABASE_URL` de producción, `PUBLIC_SITE_URL=https://vectorbikes.cl`, `PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `SESSION_SECRET`, `CANCEL_TOKEN_SECRET`, `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `SHOP_NOTIFY_EMAIL`, `PUBLIC_WHATSAPP_NUMBER` si existe); ninguno en el repo.
 - [ ] **Lanzamiento — esquema:** tras la primera publicación, el panel *Database* de producción muestra las 8 tablas de §4.
 - [ ] **Lanzamiento — admin:** `pnpm admin:set-password` ejecutado con el `DATABASE_URL` de producción; un POST a `https://vectorbikes.cl/admin/login` con las credenciales reales responde 303 a `/admin`, y `/admin` muestra la agenda de hoy sin error.
-- [ ] **Lanzamiento — Scheduled Deployment:** creada con cron `0 10 * * *`, zona America/Santiago, run `corepack pnpm reminders:send`; su primer log muestra `"ok":true`.
+- [ ] **Lanzamiento — Scheduled Deployment:** creada con cron `0 10 * * *`, zona America/Santiago, run `corepack pnpm@12.4.2 reminders:send`; su primer log muestra `"ok":true`.
 - [ ] **Lanzamiento — DNS (cPanel de Bluehosting):** registros A y TXT `replit-verify=…` de Replit creados (el TXT se deja permanente); `https://vectorbikes.cl/api/health` responde `{"ok":true,"db":true}` con certificado válido.
 - [ ] **Lanzamiento — Resend:** dominio `send.vectorbikes.cl` verificado con los registros que muestra Resend; MX/SPF/autodiscover de Microsoft 365 intactos (un correo externo a info@vectorbikes.cl sigue llegando).
 - [ ] **Lanzamiento — Turnstile:** widget real para `vectorbikes.cl`; claves de prueba reemplazadas y sitio republicado.

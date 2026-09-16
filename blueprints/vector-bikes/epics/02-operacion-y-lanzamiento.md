@@ -274,7 +274,7 @@ git tag step-11-admin-panel
 
 **Depends on:** E2-T1 · **Priority:** p1 — metadata for scope cuts, not a running order
 
-`sendReminders` selecciona reservas confirmadas de mañana (fecha local) sin `reminder_sent_at`, envía y marca con `update … where reminder_sent_at is null`; una segunda corrida envía 0. El script imprime `{"ok":…,"sent":…,"failed":…}` y termina con `process.exit`. `replit-config.test.ts` verifica `.replit` y `package.json`. `README.md` documenta desarrollo, base de datos y la Scheduled Deployment (cron `0 10 * * *`, zona America/Santiago, run `corepack pnpm reminders:send`, secretos propios, alternativa de segunda Replit App).
+`sendReminders` selecciona reservas confirmadas de mañana (fecha local) sin `reminder_sent_at`, envía y marca con `update … where reminder_sent_at is null`; una segunda corrida envía 0. El script imprime `{"ok":…,"sent":…,"failed":…}` y termina con `process.exit`. `replit-config.test.ts` verifica `.replit` y `package.json`. `README.md` documenta desarrollo, base de datos y la Scheduled Deployment (cron `0 10 * * *`, zona America/Santiago, run `corepack pnpm@12.4.2 reminders:send`, secretos propios, alternativa de segunda Replit App).
 
 **Files**
 - `src/server/email/reminders.ts` — new
