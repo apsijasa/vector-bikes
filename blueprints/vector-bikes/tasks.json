@@ -257,7 +257,7 @@
     ],
     "checkpoint": "step-10-admin-auth",
     "files": ["src/server/auth/admin-auth.ts", "src/pages/admin/login.astro", "src/pages/admin/logout.ts", "scripts/admin-set-password.ts", "tests/integration/admin-auth.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T4",
