@@ -9,6 +9,7 @@ import {
   type Mode,
   bookingReducer,
   initialState,
+  parseResponseBody,
   phoneE164,
   selectedBlocks,
   validateForm,
@@ -138,12 +139,11 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
         headers: { "content-type": "application/json" },
         body: requestBody(),
       });
-      const body = (await response.json()) as BookingResult & {
-        error?: string;
-        fields?: Record<string, string>;
-      };
-      if (response.status === 201) {
-        dispatch({ type: "submitSuccess", result: body });
+      // Se lee como texto: si el cuerpo no es JSON (HTML de un proxy), el estado HTTP sigue
+      // eligiendo el mensaje en vez de caer al error de red.
+      const body = parseResponseBody(await response.text());
+      if (response.status === 201 && body.code) {
+        dispatch({ type: "submitSuccess", result: body as BookingResult });
         return;
       }
       dispatch({ type: "submitFailed", status: response.status, body });

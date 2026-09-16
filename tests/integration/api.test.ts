@@ -109,6 +109,18 @@ describe("API pública", () => {
     expect(onCreated).toHaveBeenCalledTimes(1);
   });
 
+  it("en retiro el servidor calcula el fin con los dos bloques", async () => {
+    const retiro = body({
+      mode: "retiro",
+      start: "17:00",
+      comuna: "Vitacura",
+      direccion: "Av. Kennedy 7666",
+    });
+    const response = await handleCreateBooking(postRequest(retiro), ctx);
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ start: "17:00", end: "18:00", mode: "retiro" });
+  });
+
   it("nombra el campo inválido en el 422", async () => {
     const sinComuna = await handleCreateBooking(
       postRequest(body({ mode: "retiro", start: "16:00", direccion: "Av. Kennedy 7666" })),

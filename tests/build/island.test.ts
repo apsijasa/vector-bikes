@@ -17,6 +17,13 @@ describe("isla de reserva construida", () => {
     expect(html).toContain('id="f-ok"');
   });
 
+  it("el bundle construido lee la respuesta como texto y trae los mensajes de respaldo", () => {
+    const island = /<astro-island[^>]*component-url="([^"]+)"/.exec(html)?.[1] ?? "";
+    const bundle = readFileSync(`dist/client${island}`, "utf8");
+    expect(bundle).toContain(".text()");
+    expect(bundle).toContain("Demasiados intentos. Espera unos minutos e intenta de nuevo.");
+  });
+
   it("muestra el ticket y el botón de envío", () => {
     expect(html).toContain("Orden de reserva");
     expect(html).toContain("Confirmar reserva");

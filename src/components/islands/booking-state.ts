@@ -243,6 +243,13 @@ export function phoneE164(raw: string): string | null {
   return digits.length === 8 ? `+569${digits}` : null;
 }
 
+/** `HH:MM` más `minutes` minutos. */
+function addMinutes(hhmm: string, minutes: number): string {
+  const parts = hhmm.split(":");
+  const total = Number(parts[0]) * 60 + Number(parts[1]) + minutes;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 /** `retiro` ocupa el bloque elegido y el siguiente. */
 export function selectedBlocks(state: State): string[] {
   if (state.selectedStart === null) {
@@ -251,10 +258,33 @@ export function selectedBlocks(state: State): string[] {
   if (state.mode === "taller") {
     return [state.selectedStart];
   }
-  const parts = state.selectedStart.split(":");
-  const minutes = Number(parts[0]) * 60 + Number(parts[1]) + 30;
-  const next = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-  return [state.selectedStart, next];
+  return [state.selectedStart, addMinutes(state.selectedStart, 30)];
+}
+
+/** `17:00 – 18:00`: del inicio del primer bloque al fin del último (bloques de 30 min). */
+export function timeRange(blocks: string[]): string | null {
+  const first = blocks[0];
+  const last = blocks.at(-1);
+  if (first === undefined || last === undefined) {
+    return null;
+  }
+  return `${first} – ${addMinutes(last, 30)}`;
+}
+
+export type ResponseBody = BookingResult & {
+  error?: string;
+  code?: string;
+  fields?: Record<string, string>;
+};
+
+/** Cuerpo de la API; un proxy puede responder HTML o vacío (p. ej. un 429 propio). */
+export function parseResponseBody(text: string): Partial<ResponseBody> {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === "object" ? (parsed as Partial<ResponseBody>) : {};
+  } catch {
+    return {};
+  }
 }
 
 export function ticketCode(date: string, start: string): string {

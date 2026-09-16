@@ -1,4 +1,4 @@
-import { type State, formatClp, ticketCode } from "./booking-state.ts";
+import { type State, formatClp, ticketCode, timeRange } from "./booking-state.ts";
 import { PICKUP_FEE_CLP } from "./booking-state.ts";
 
 export function BookingTicket({
@@ -32,7 +32,7 @@ export function BookingTicket({
         </div>
         <div class="row">
           <dt>Hora</dt>
-          <dd class="mono">{chosen.length > 0 ? chosen.join(" – ") : "Elige un bloque"}</dd>
+          <dd class="mono">{timeRange(chosen) ?? "Elige un bloque"}</dd>
         </div>
         <div class="row">
           <dt>Pago</dt>
