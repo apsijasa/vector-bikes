@@ -41,7 +41,7 @@ Configúralo así en Replit:
 
 1. *Deployments → Create → Scheduled*.
 2. Programación diaria a las 10:00: cron `0 10 * * *`, eligiendo **America/Santiago** en el selector de zona horaria.
-3. Comando de build: `corepack pnpm@12.4.2 install --frozen-lockfile`.
+3. Comando de build: `corepack pnpm@12.4.2 install --frozen-lockfile --config.minimumReleaseAge=0`.
 4. Comando de ejecución: `corepack pnpm@12.4.2 reminders:send`.
 5. Secretos de esa deployment (cada deployment tiene los suyos):
    - `DATABASE_URL` (la de producción)
