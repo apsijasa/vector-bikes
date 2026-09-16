@@ -13,7 +13,6 @@
   --hatch: #e3e3df;
   --on-ink: #f6f6f4;
   --logo-filter: none;
-  --logo-blend: multiply;
   --display: "Michroma", "Eurostile", "Arial Black", sans-serif;
   --body: "Archivo Variable", "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -33,7 +32,6 @@
     --hatch: #1e2022;
     --on-ink: #0c0d0e;
     --logo-filter: invert(1);
-    --logo-blend: screen;
   }
 }
 :root[data-theme="dark"] {
@@ -46,7 +44,6 @@
   --hatch: #1e2022;
   --on-ink: #0c0d0e;
   --logo-filter: invert(1);
-  --logo-blend: screen;
 }
 
 * {
@@ -134,13 +131,12 @@ p {
 .wordmark {
   display: block;
   width: 176px;
-  height: 38px;
+  height: 34px;
   background-image: url("/brand/vector-bikes-logo.png");
   background-size: 208px 208px;
-  background-position: -16px -144px;
+  background-position: -16px -145px;
   background-repeat: no-repeat;
   filter: var(--logo-filter);
-  mix-blend-mode: var(--logo-blend);
 }
 .nav {
   display: flex;
@@ -284,13 +280,12 @@ p {
 }
 .drawing .mark {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 734 / 626;
   background-image: url("/brand/vector-bikes-logo.png");
-  background-size: 185.7% auto;
-  background-position: 50% 29.2%;
+  background-size: 170.8% auto;
+  background-position: 40.8% 32.2%;
   background-repeat: no-repeat;
   filter: var(--logo-filter);
-  mix-blend-mode: var(--logo-blend);
 }
 .drawing svg {
   position: absolute;
@@ -302,13 +297,13 @@ p {
 .drawing svg line,
 .drawing svg path {
   stroke: var(--steel);
-  stroke-width: 1;
+  stroke-width: 2.2;
   fill: none;
 }
 .drawing svg text {
   fill: var(--steel);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 22px;
   letter-spacing: 0.08em;
 }
 @media (max-width: 860px) {
