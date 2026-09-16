@@ -1,7 +1,8 @@
 ---
 import Base from "../../layouts/Base.astro";
 import { getSiteEnv } from "../../lib/env.ts";
-import { clientIp, hashIp, isAllowedOrigin } from "../../server/api/handlers.ts";
+import { clientIp } from "../../server/api/client-ip.ts";
+import { hashIp, isAllowedOrigin } from "../../server/api/handlers.ts";
 import {
   loginAdmin,
   loginFormSchema,

@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { log } from "../../lib/log.ts";
-import { clientIp, handleCreateBooking } from "../../server/api/handlers.ts";
+import { clientIp } from "../../server/api/client-ip.ts";
+import { handleCreateBooking } from "../../server/api/handlers.ts";
 import { getDb } from "../../server/db/client.ts";
 import { notifyBookingCreated } from "../../server/email/notifications.ts";
 

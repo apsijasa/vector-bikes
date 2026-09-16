@@ -82,25 +82,6 @@ export function isAllowedOrigin(
   }
 }
 
-/**
- * IP del cliente detrás del proxy de Replit: primer valor de `x-forwarded-for`, luego
- * `x-real-ip` y `cf-connecting-ip`; si no hay ninguna, la IP que entrega el servidor.
- */
-export function clientIp(request: Request, fallback: string | null): string | null {
-  const candidates = [
-    request.headers.get("x-forwarded-for")?.split(",")[0],
-    request.headers.get("x-real-ip"),
-    request.headers.get("cf-connecting-ip"),
-  ];
-  for (const candidate of candidates) {
-    const ip = candidate?.trim();
-    if (ip) {
-      return ip;
-    }
-  }
-  return fallback;
-}
-
 /** La IP nunca se guarda en claro. */
 export function hashIp(ip: string | null): string | null {
   if (ip === null) {

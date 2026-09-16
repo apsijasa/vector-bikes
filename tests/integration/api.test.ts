@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type HandlerContext,
-  clientIp,
   handleAvailability,
   handleCreateBooking,
 } from "../../src/server/api/handlers.ts";
@@ -185,29 +184,5 @@ describe("API pública", () => {
     const response = await handleCreateBooking(postRequest(body()), { ...ctx, onCreated });
     expect(response.status).toBe(201);
     expect(onCreated).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("clientIp", () => {
-  const request = (headers: Record<string, string>) =>
-    new Request("https://vectorbikes.cl/api/reservas", { headers });
-
-  it("toma el primer valor de x-forwarded-for", () => {
-    const ip = clientIp(request({ "x-forwarded-for": "190.5.1.2, 10.0.0.1" }), "10.0.0.9");
-    expect(ip).toBe("190.5.1.2");
-  });
-
-  it("sigue con x-real-ip y luego cf-connecting-ip", () => {
-    expect(
-      clientIp(request({ "x-real-ip": "190.5.1.3", "cf-connecting-ip": "190.5.1.4" }), null),
-    ).toBe("190.5.1.3");
-    expect(clientIp(request({ "cf-connecting-ip": "190.5.1.4" }), null)).toBe("190.5.1.4");
-  });
-
-  it("ignora cabeceras vacías y usa la IP del servidor al final", () => {
-    expect(clientIp(request({ "x-forwarded-for": " ", "x-real-ip": "" }), "10.0.0.9")).toBe(
-      "10.0.0.9",
-    );
-    expect(clientIp(request({}), null)).toBeNull();
   });
 });

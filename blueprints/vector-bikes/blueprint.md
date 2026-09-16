@@ -182,6 +182,7 @@ Gotchas del track que se trasladan: `corepack enable` con `--install-directory` 
 │       │   └── cancel-flow.ts     # paso 9 — flujo por token (GET/POST)
 │       ├── api/
 │       │   ├── handlers.ts        # paso 5 — handlers HTTP de disponibilidad y reservas
+│       │   ├── client-ip.ts       # IP real tras el proxy (rightmost non-trusted)
 │       │   └── turnstile.ts       # paso 5 — verificación siteverify (fetch inyectable)
 │       ├── email/
 │       │   ├── transport.ts       # paso 8 — resend | console
@@ -564,7 +565,7 @@ No hay seed de negocio: una base vacía ya es usable (la landing muestra días a
 - Validación: zod 4; esquemas en `src/server/api/handlers.ts`, junto al handler que los usa.
 - Paginación: NOT APPLICABLE en la API pública (disponibilidad acotada a 31 días); la agenda admin es por día.
 - Idempotencia: sin `Idempotency-Key`; la regla "1 reserva futura por teléfono" y el índice único convierten un reintento en 409, nunca en duplicado.
-- Rate limits: `POST /api/reservas` 5 por IP / 10 min (tabla `booking_requests`; el límite se revisa antes de zod, pero solo cuentan los intentos que pasan la validación: un 422 no suma); login admin 5 fallidos por IP+correo / 15 min (tabla `login_attempts`). Almacenamiento en Postgres. IP = primer valor de `x-forwarded-for`, luego `x-real-ip`, luego `cf-connecting-ip`, o `clientAddress` si no hay ninguna.
+- Rate limits: `POST /api/reservas` 5 por IP / 10 min (tabla `booking_requests`; el límite se revisa antes de zod, pero solo cuentan los intentos que pasan la validación: un 422 no suma); login admin 5 fallidos por IP+correo / 15 min (tabla `login_attempts`). Almacenamiento en Postgres. IP = la dirección más a la derecha de `x-forwarded-for` que no sea de confianza (34/8 y 35/8 de Google/Replit, 10/8, 172.16/12, 192.168/16, 127/8, `::1`, fc00::/7, fe80::/10; si todas lo son, la última), porque el cliente puede anteponer valores falsos; sin `x-forwarded-for`, `x-real-ip`, luego `cf-connecting-ip`, o `clientAddress`. Vive en `src/server/api/client-ip.ts`.
 
 ### Rutas
 
@@ -1183,10 +1184,11 @@ git tag step-04-booking-writes
 **Depende de:** 4. Desde este paso son obligatorias `TURNSTILE_SECRET_KEY` y `SESSION_SECRET`.
 
 **Do**
+- `src/server/api/client-ip.ts` — `clientIp(request: Request, fallback: string | null): string | null`: recorre `x-forwarded-for` de derecha a izquierda (`ipFromForwardedFor`) y devuelve la primera IP válida fuera de los rangos de confianza (34/8, 35/8, 10/8, 172.16/12, 192.168/16, 127/8, `::1`, fc00::/7, fe80::/10, con `node:net` `BlockList`); si todas son de confianza, la última; sin `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` y `fallback`. Tests en `tests/unit/client-ip.test.ts`.
 - `src/server/api/turnstile.ts` — `verifyTurnstile(args: { token: string; ip: string | null; secret: string; fetchFn?: typeof fetch }): Promise<boolean>`: `POST https://challenges.cloudflare.com/turnstile/v0/siteverify` con cuerpo `URLSearchParams` (`secret`, `response`, y `remoteip` si hay IP); devuelve `true` solo si el JSON trae `success === true`; cualquier error de red o JSON → `false` (y log `turnstile.error`).
 - `src/server/api/handlers.ts` — sin imports de `astro`:
   - `type HandlerContext = { db: AppDb; now: Date; ip: string | null; fetchFn?: typeof fetch; onCreated?: (booking: Booking, cancelToken: string) => Promise<void> }`.
-  - `clientIp(request: Request, fallback: string | null): string | null` (primer valor de `x-forwarded-for`, luego `x-real-ip` y `cf-connecting-ip`, recortados; vacíos se ignoran) y `hashIp(ip: string | null): string | null` (HMAC-SHA-256 hex con `getHashEnv().SESSION_SECRET`).
+  - `hashIp(ip: string | null): string | null` (HMAC-SHA-256 hex con `getHashEnv().SESSION_SECRET`).
   - `jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response` y `errorResponse(status, code, error, fields?)` con la forma de error de §5.
   - `normalizePhone(raw: string): string | null` según §5.
   - `handleAvailability(url: URL, ctx: HandlerContext): Promise<Response>` — zod para `desde`/`dias`/`modo` (§5); una consulta de bloques activos, bloqueos y conteo por fecha para el rango; `computeDay` por día; respuesta 200 con la forma exacta de §5.
@@ -1403,7 +1405,7 @@ git tag step-09-cancellation
 
 #### Paso 10 — Acceso admin
 
-**Depende de:** 9 (usa `isAllowedOrigin`, `clientIp` y `hashIp` de `src/server/api/handlers.ts`; las tablas `admin_users`, `admin_sessions`, `login_attempts` existen desde el paso 2). `ADMIN_EMAIL` y `ADMIN_PASSWORD` solo las lee el script, cuando el dueño lo ejecuta.
+**Depende de:** 9 (usa `isAllowedOrigin` y `hashIp` de `src/server/api/handlers.ts` y `clientIp` de `src/server/api/client-ip.ts`; las tablas `admin_users`, `admin_sessions`, `login_attempts` existen desde el paso 2). `ADMIN_EMAIL` y `ADMIN_PASSWORD` solo las lee el script, cuando el dueño lo ejecuta.
 
 **Do**
 - `src/server/auth/admin-auth.ts`:
@@ -3175,6 +3177,7 @@ Todo lo de arriba afirma propiedades, no conteos. Ninguna línea acepta "cualqui
 | Feriados 2027 desconocidos | A | M | Advertencia en `/admin` desde el 2 de diciembre de 2026 | Advertencia visible + bloqueos manuales + skill `add-holidays` (dueño) |
 | Datos personales (Ley 21.719) | B | A | Solicitud de acceso/supresión o reclamo | Consentimiento con `consent_at`, aviso de privacidad, campos mínimos, procedimiento de anonimización de §14, contacto info@ (dueño) |
 | pnpm 12 cambia la aprobación de scripts de build (no verificado) | M | M | `pnpm install` aborta con `ERR_PNPM_IGNORED_BUILDS` | `allowBuilds` emitido + respaldo `pnpm approve-builds --all` en el Bootstrap (builder) |
+| Evasión del límite por IP desde Google Cloud: `clientIp` confía en 34/8 y 35/8 (infraestructura de Google/Replit), así que quien ataque desde una IP de Google Cloud se salta como proxy y puede anteponer una IP falsa a `x-forwarded-for`, o cae en el último salto, que cambia en cada petición | B | M | Muchos 403 de Turnstile o reservas sospechosas sin que salten 429; `booking_requests` con muchos `ip_hash` distintos en pocos minutos | Aceptado: la defensa principal es Turnstile, más el tope de 4 reservas por día y 1 reserva futura por teléfono; el límite por IP es una capa secundaria. Si se abusa, confiar solo en los saltos exactos de Replit en vez de rangos completos (dueño) |
 
 ### 20.3 Registro de decisiones
 
