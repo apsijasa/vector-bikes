@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { clientIp, handleCreateBooking } from "../../server/api/handlers.ts";
 import { getDb } from "../../server/db/client.ts";
+import { notifyBookingCreated } from "../../server/email/notifications.ts";
 
 export const prerender = false;
 
@@ -9,4 +10,5 @@ export const POST: APIRoute = ({ request, clientAddress }) =>
     db: getDb(),
     now: new Date(),
     ip: clientIp(request, clientAddress),
+    onCreated: notifyBookingCreated,
   });

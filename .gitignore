@@ -15,5 +15,6 @@ coverage/
 
 # Estado local de Replit y corepack
 .local/
+.upm/
 .cache/
 .config/

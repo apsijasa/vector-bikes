@@ -206,7 +206,7 @@
     ],
     "checkpoint": "step-08-emails",
     "files": ["src/server/email/transport.ts", "src/server/email/templates.ts", "src/server/email/notifications.ts", "src/pages/api/reservas.ts", "tests/integration/email.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T2",
