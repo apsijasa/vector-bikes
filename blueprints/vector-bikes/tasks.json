@@ -181,7 +181,7 @@
     ],
     "checkpoint": "step-07-booking-island",
     "files": ["src/components/islands/booking-state.ts", "src/components/islands/BookingIsland.tsx", "src/components/Landing.astro", "tests/unit/booking-state.test.ts", "tests/build/island.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T1",

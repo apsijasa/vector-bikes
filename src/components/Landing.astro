@@ -1,4 +1,5 @@
 ---
+import BookingIsland from "./islands/BookingIsland.tsx";
 import { SITE } from "../lib/site.ts";
 
 interface Props {
@@ -135,7 +136,7 @@ const numbers = [10, 12, 14, 16, 18, 20].map((hour) => ({
         </p>
       </div>
     </div>
-    <p class="ruler-note">Cargando reservas…</p>
+    <BookingIsland client:visible siteKey={siteKey} />
   </div>
 </section>
 
