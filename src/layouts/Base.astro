@@ -3,6 +3,7 @@ import "@fontsource/michroma/400.css";
 import "@fontsource-variable/archivo/index.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
+import { SITE, whatsappHref } from "../lib/site.ts";
 import "../styles/global.css";
 
 interface Props {
@@ -10,10 +11,12 @@ interface Props {
   description: string;
   path: string;
   noindex?: boolean;
+  chrome?: "site" | "none";
 }
 
-const { title, description, path, noindex = false } = Astro.props;
+const { title, description, path, noindex = false, chrome = "site" } = Astro.props;
 const canonical = new URL(path, Astro.site).href;
+const whatsapp = whatsappHref(import.meta.env.PUBLIC_WHATSAPP_NUMBER);
 ---
 
 <!doctype html>
@@ -30,6 +33,77 @@ const canonical = new URL(path, Astro.site).href;
   </head>
   <body>
     <a class="skip" href="#contenido">Saltar al contenido</a>
+    {
+      chrome === "site" && (
+        <header class="site-head">
+          <div class="wrap">
+            <a href="/" class="wordmark" aria-label="Vector Bikes, inicio" />
+            <nav class="nav" aria-label="Principal">
+              <a href="/#como-funciona">Cómo funciona</a>
+              <a href="/#retiro">Retiro a domicilio</a>
+              <a href="/#taller">Taller</a>
+              <a href="/#preguntas">Preguntas</a>
+              <a href="/#reservar" class="btn">
+                Reservar hora
+              </a>
+            </nav>
+          </div>
+        </header>
+      )
+    }
     <main id="contenido"><slot /></main>
+    {
+      chrome === "site" && (
+        <footer class="foot">
+          <div class="wrap">
+            <div>
+              <a href="/" class="wordmark" aria-label="Vector Bikes, inicio" />
+              <p style="margin-top:14px;font-size:.84rem;color:var(--steel);max-width:46ch">
+                Usamos tus datos solo para gestionar tu reserva y contactarte sobre tu bicicleta.
+                Escríbenos a info@vectorbikes.cl para revisarlos o eliminarlos.
+              </p>
+              <p style="margin-top:12px;font-size:.84rem">
+                <a href="/privacidad">Aviso de privacidad</a>
+              </p>
+            </div>
+            <div class="foot-links">
+              <a href={SITE.instagramUrl} rel="noopener" target="_blank">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r=".6" />
+                </svg>
+                {SITE.instagramHandle}
+              </a>
+              <a href={`mailto:${SITE.email}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="1" />
+                  <path d="M3 7l9 6 9-6" />
+                </svg>
+                {SITE.email}
+              </a>
+              <a href={SITE.mapsUrl} rel="noopener" target="_blank">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" />
+                  <circle cx="12" cy="10" r="2.5" />
+                </svg>
+                {SITE.addressShort}
+              </a>
+            </div>
+          </div>
+        </footer>
+      )
+    }
+    {
+      chrome === "site" && whatsapp && (
+        <a class="wa" href={whatsapp} rel="noopener" target="_blank" aria-label="Escríbenos por WhatsApp">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 20l1.4-4.2A8 8 0 1 1 8.4 19z" />
+            <path d="M9 9.5c.3 2 2.2 4 4.5 4.5l1-1.2 1.8.8-.4 1.6c-3.6.2-7.4-3.4-7.3-7l1.6-.4.8 1.8z" />
+          </svg>
+          <span>WhatsApp</span>
+        </a>
+      )
+    }
   </body>
 </html>

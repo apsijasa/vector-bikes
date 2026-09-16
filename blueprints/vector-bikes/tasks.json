@@ -155,7 +155,7 @@
     ],
     "checkpoint": "step-06-landing",
     "files": ["src/lib/site.ts", "src/layouts/Base.astro", "src/components/Landing.astro", "src/pages/index.astro", "tests/build/landing.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T7",
