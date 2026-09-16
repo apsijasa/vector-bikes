@@ -2,7 +2,7 @@
 # VERIFICAR ANTES DE INSTALAR: el nombre del módulo de Node 24 no está confirmado en la documentación.
 # Si Replit lo cambia al elegir Node 24 en el selector de lenguaje/módulo, se acepta su valor.
 modules = ["nodejs-24"]
-run = "sh -c 'corepack pnpm build && corepack pnpm start'"
+run = "sh -c 'corepack pnpm@12.4.2 build && corepack pnpm@12.4.2 start'"
 
 [deployment]
 deploymentTarget = "cloudrun"

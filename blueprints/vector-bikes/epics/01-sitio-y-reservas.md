@@ -150,7 +150,7 @@ grep -q 'Mecánica de precisión.' dist/client/index.html
 grep -q 'PORT=4321 node dist/server/entry.mjs' .replit
 grep -q 'localPort = 4321' .replit
 grep -q 'PORT=4321 node dist/server/entry.mjs' package.json
-grep -q '"packageManager": "pnpm@12.4.2"' package.json
+grep -q '^build = .*pnpm@12.4.2 install --frozen-lockfile' .replit
 sh scripts/smoke.sh
 ```
 

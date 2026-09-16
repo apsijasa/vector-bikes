@@ -84,7 +84,7 @@ Las versiones vienen del informe de `stack-researcher` de esta sesión (verifica
 | Correo / notificaciones | Resend desde `send.vectorbikes.cl`, con abstracción `EMAIL_TRANSPORT=resend\|console` | API simple, SDK tipado, recomienda subdominio (no choca con el SPF de Microsoft 365 en el apex). El transporte `console` hace que tests y desarrollo local nunca toquen la red. |
 | Anti-abuso | Cloudflare Turnstile + rate limit en Postgres + 1 reserva futura por teléfono | Sin CAPTCHA molesto; claves de prueba oficiales para tests; el rate limit en Postgres evita sumar Redis. |
 | Hosting | Replit: Autoscale Deployment (web) + Scheduled Deployment (recordatorios) + Postgres de Replit | Decisión del dueño (plan Core ya contratado; el código vive en la Replit App). Un solo proveedor para un operador no técnico. |
-| Gestor de paquetes | pnpm 12 vía corepack | `node_modules` estricto detecta dependencias fantasma; `packageManager` en `package.json` fija la versión en Replit y en cualquier máquina. |
+| Gestor de paquetes | pnpm 12 vía corepack | `node_modules` estricto detecta dependencias fantasma; la versión se fija en el `build` de `[deployment]` de `.replit` (`corepack pnpm@12.4.2 …`), no en `packageManager`, porque Replit reescribe `package.json` al publicar (§20.3 #19). |
 
 ### Chequeo de compatibilidad
 Revisado contra `knowledge/stack-compatibility.md` — ninguna de las filas de combinaciones conocidas como problemáticas aplica, **con una fila que el propio track trae y que se neutraliza explícitamente**: *linter que parsea CSS (Biome) + motor CSS-first con at-rules (Tailwind 4)*. `biome.json` (emitido en §19.6) activa `css.parser.tailwindDirectives: true` antes del primer `lint`. Además:
@@ -922,7 +922,7 @@ grep -q 'Mecánica de precisión.' dist/client/index.html      # expect: exit 0
 grep -q 'PORT=4321 node dist/server/entry.mjs' .replit       # expect: exit 0 — contrato .replit ↔ build
 grep -q 'localPort = 4321' .replit                           # expect: exit 0
 grep -q 'PORT=4321 node dist/server/entry.mjs' package.json  # expect: exit 0 — contrato package.json ↔ build
-grep -q '"packageManager": "pnpm@12.4.2"' package.json       # expect: exit 0 — contrato package.json ↔ Bootstrap
+grep -q '^build = .*pnpm@12.4.2 install --frozen-lockfile' .replit   # expect: exit 0 — contrato build de [deployment] ↔ Bootstrap
 sh scripts/smoke.sh                                          # expect: exit 0, imprime smoke ok: {"ok":true,"db":false}
 ```
 
@@ -1508,7 +1508,7 @@ git tag step-11-admin-panel
 - `src/server/email/reminders.ts` — `sendReminders(db: AppDb, now: Date, deps: { transport: EmailTransport } = { transport: createTransport() }): Promise<{ sent: number; failed: number }>`: `tomorrow = addDays(localToday(now), 1)`; selecciona reservas `status = 'confirmed'`, `service_date = tomorrow`, `reminder_sent_at is null`, ordenadas por `starts_at`; por cada una envía `reminderEmail(booking)` a `booking.email` y luego `update bookings set reminder_sent_at = now where id = $id and reminder_sent_at is null`; un envío fallido se registra `email.failed`, suma a `failed` y no marca la fila. No importa `notifications.ts` (así el script no carga `ics`).
 - `scripts/reminders-send.ts` — `const result = await sendReminders(getDb(), new Date())`; imprime `{"ok":<failed === 0>,"sent":<n>,"failed":<m>}`; `process.exit(result.failed === 0 ? 0 : 1)` (el `exit` explícito cierra el pool de `postgres`); excepción → mensaje a stderr y `process.exit(1)`.
 - `tests/integration/reminders.test.ts` — PGlite, `consoleOutbox` vacío, reservas creadas con `now = 2026-09-15T13:00:00.000Z` (10:00 local) y teléfonos distintos: A `taller` `2026-09-16` `15:00`, B `retiro` `2026-09-16` `17:00`, C `taller` `2026-09-16` `18:00` luego cancelada, D `taller` `2026-09-17` `15:00`. Primera `sendReminders(db, now)` → `{ sent: 2, failed: 0 }`, 2 mensajes con asunto que empieza con `Recordatorio:`, y `reminder_sent_at` no nulo en A y B y nulo en C y D. Segunda llamada → `{ sent: 0, failed: 0 }` y `consoleOutbox` sigue con 2 mensajes.
-- `tests/unit/replit-config.test.ts` — lee `.replit` y `package.json`: `.replit` contiene `[deployment]`, `deploymentTarget = "cloudrun"`, una línea `build` que contiene `pnpm install --frozen-lockfile` y `pnpm build`, una línea `run` que contiene `HOST=0.0.0.0` y `node dist/server/entry.mjs`, y `localPort = 4321`; `package.json` tiene `packageManager` `pnpm@12.4.2`, `scripts.start` que contiene `node dist/server/entry.mjs`, y `scripts["reminders:send"]` igual a `node --env-file-if-exists=.env scripts/reminders-send.ts`.
+- `tests/unit/replit-config.test.ts` — lee `.replit` y `package.json`: `.replit` contiene `[deployment]`, `deploymentTarget = "cloudrun"`, una línea `build` que contiene `pnpm@12.4.2 install --frozen-lockfile` y `pnpm@12.4.2 build`, una línea `run` que contiene `HOST=0.0.0.0` y `node dist/server/entry.mjs`, y `localPort = 4321`; `package.json` tiene `scripts.start` que contiene `node dist/server/entry.mjs`, y `scripts["reminders:send"]` igual a `node --env-file-if-exists=.env scripts/reminders-send.ts`.
 - `README.md` — crear con secciones: `# Vector Bikes`; `## Desarrollo` (Bootstrap de §10 resumido, `pnpm dev` en el puerto 4321, `pnpm gate` como compuerta); `## Base de datos` (crear la base en la herramienta *Database* del workspace; `pnpm db:generate`, `pnpm db:migrate` y `pnpm db:check` solo contra la base del workspace; al publicar, Replit propaga el esquema a producción; la app nunca migra); `## Recordatorios (Scheduled Deployment)` con los pasos exactos: *Deployments → Create → Scheduled*; programación diaria a las 10:00 (cron `0 10 * * *`) eligiendo **America/Santiago** en el selector de zona horaria; comando de build `corepack pnpm install --frozen-lockfile`; comando de ejecución `corepack pnpm reminders:send`; secretos de esa deployment: `DATABASE_URL` (la de producción), `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `SHOP_NOTIFY_EMAIL`, `PUBLIC_SITE_URL`; y la nota: *si Replit no permite una segunda deployment en la misma App, crear una segunda Replit App importando el mismo repositorio Git solo para esta tarea programada*.
 
 **Done when**
@@ -1790,7 +1790,7 @@ pnpm exec biome ci .                             # expect: exit 0
 | Paquete | Versión | Fuente | Verificado | Instalado por | Propósito |
 |---|---|---|---|---|---|
 | Node.js | 24.21.0 LTS "Krypton" (`.nvmrc` = `24`, `engines` `>=22.12.0`) | https://nodejs.org/dist/index.json | 2026-09-15 | Prerrequisito (selector de módulo de Replit); validado en §10 Bootstrap | Runtime; ejecuta scripts `.ts` con type stripping |
-| pnpm | 12.4.2 (`packageManager`) | https://registry.npmjs.org/-/package/pnpm/dist-tags | 2026-09-15 | §10 Bootstrap — `corepack prepare pnpm@12.4.2 --activate` | Gestor de paquetes. pnpm 12 eliminó 18 flags de install (p. ej. `--shamefully-hoist`): no usar ninguno. Aprobación de builds (`allowBuilds`) verificada con pnpm 12.4.2; pnpm 12 también aplica `minimumReleaseAgeExclude` (ya emitido en `pnpm-workspace.yaml`) |
+| pnpm | 12.4.2 (`build` de `[deployment]` en `.replit`) | https://registry.npmjs.org/-/package/pnpm/dist-tags | 2026-09-15 | §10 Bootstrap — `corepack prepare pnpm@12.4.2 --activate` | Gestor de paquetes. pnpm 12 eliminó 18 flags de install (p. ej. `--shamefully-hoist`): no usar ninguno. Aprobación de builds (`allowBuilds`) verificada con pnpm 12.4.2; pnpm 12 también aplica `minimumReleaseAgeExclude` (ya emitido en `pnpm-workspace.yaml`) |
 | astro | 7.3.2 | https://registry.npmjs.org/astro | 2026-09-15 | §10 Bootstrap — `pnpm install` | Framework (engines node `>=22.12.0`; rechaza tags no-void sin cerrar) |
 | @astrojs/node | 11.1.5 | https://registry.npmjs.org/@astrojs/node | 2026-09-15 | §10 Bootstrap — `pnpm install` | Adapter standalone (peer astro `^7.2.1`) |
 | @astrojs/preact | 6.0.5 | https://registry.npmjs.org/@astrojs/preact | 2026-09-15 | §10 Bootstrap — `pnpm install` | Integración de la isla (peer preact `^10.6.5`) |
@@ -2569,7 +2569,6 @@ ADMIN_PASSWORD=
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.4.2",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -3082,7 +3081,7 @@ try {
 | Carpeta de migraciones | `drizzle.config.ts` `out` | `./drizzle` (= `drizzle`) | `scripts/db-migrate.ts` · `scripts/db-check.ts` · `tests/helpers/pglite.ts` · `biome.json` `!!**/drizzle` · §3 · §4 | yes |
 | Ruta del esquema | `drizzle.config.ts` `schema` | `./src/server/db/schema.ts` | §3 · §4 · paso 2 · `.claude/rules/database.md` · CLAUDE.md | yes |
 | Setup de tests | `vitest.config.ts` `setupFiles` | `tests/setup.ts` | §3 · §19.6 | yes |
-| Gestor de paquetes | `package.json` `packageManager` | `pnpm@12.4.2` | §10 Bootstrap `corepack prepare pnpm@12.4.2` · CLAUDE.md · §11 · paso 1 Verify · `replit-config.test.ts` | yes |
+| Gestor de paquetes | `.replit` `[deployment]` `build` | `pnpm@12.4.2` | §10 Bootstrap `corepack prepare pnpm@12.4.2` · CLAUDE.md · §11 · paso 1 Verify · `replit-config.test.ts` | yes |
 | URL local de Postgres | `.env.example` `DATABASE_URL` | `postgres://postgres:postgres@127.0.0.1:5432/vector_bikes` | `drizzle.config.ts` respaldo · §10 · §19.6 | yes |
 | Ruta del bundle | ubicación del bundle en el proyecto | `blueprints` (`blueprints/vector-bikes/workspace`) | `biome.json` `!!**/blueprints` · `tsconfig.json` `exclude` · `vitest.config.ts` `exclude` · `pnpm-workspace.yaml` `!blueprints/**` · `src/styles/global.css` `@source not "../../blueprints"` · §10 Bootstrap `WS=` | yes |
 | Nombre de la compuerta | `package.json` `scripts.gate` | `pnpm gate` | CLAUDE.md · AGENTS.md · `.claude/settings.json` · skill `add-holidays` · paso 14 · §12 · §20.1 · README | yes |
@@ -3091,7 +3090,7 @@ try {
 | Cuerpo de salud | `src/pages/api/health.ts` (paso 2) | `{"ok":true,"db":true}` | §5 · `scripts/smoke.sh` (`grep '"db":true'`) · §16 | yes |
 | Logo | `public/brand/vector-bikes-logo.png` | `/brand/vector-bikes-logo.png` | `global.css` (`.wordmark`, `.drawing .mark`) · `Base.astro` (icon, `og:image`) · §7 | yes |
 
-Cada contrato se ejercita en el primer paso donde existen ambos lados: entry, puerto y `packageManager` (`.replit` ↔ `package.json` ↔ build) en el paso 1; carpeta de migraciones ↔ helper y scripts en el paso 2; `site` ↔ tests del build en el paso 6 (landing) y 13 (SEO); `gate` en el paso 14, donde se ejecuta por primera vez.
+Cada contrato se ejercita en el primer paso donde existen ambos lados: entry, puerto y versión de pnpm (`.replit` ↔ `package.json` ↔ build de `[deployment]`) en el paso 1; carpeta de migraciones ↔ helper y scripts en el paso 2; `site` ↔ tests del build en el paso 6 (landing) y 13 (SEO); `gate` en el paso 14, donde se ejecuta por primera vez.
 
 #### Reconciliación de artefactos byte a byte
 
