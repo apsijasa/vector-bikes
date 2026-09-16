@@ -57,6 +57,8 @@ export type Action =
       type: "submitFailed";
       status: number;
       body: { error?: string; code?: string; fields?: Record<string, string> };
+      /** TEMPORAL: detalle técnico que se agrega al mensaje (código HTTP o error de fetch). */
+      diag?: string;
     };
 
 const MESSAGES = {
@@ -150,6 +152,30 @@ function failureMessage(status: number, body: { error?: string; code?: string })
   return MESSAGES.network;
 }
 
+function failedSubmit(state: State, action: Extract<Action, { type: "submitFailed" }>): State {
+  if (action.status === 422) {
+    return failedValidation(state, action.body);
+  }
+  const base: State = {
+    ...state,
+    turnstileToken: null,
+    submit: { status: "failed", message: failureMessage(action.status, action.body) },
+  };
+  return action.status === 409 ? { ...base, selectedStart: null } : base;
+}
+
+// TEMPORAL: diagnóstico del error de reserva en el navegador. Quitar junto con `diag`
+// en la acción y en BookingIsland.tsx cuando se identifique la causa.
+function withDiag(state: State, diag: string | undefined): State {
+  if (diag === undefined || state.submit.message === null) {
+    return state;
+  }
+  return {
+    ...state,
+    submit: { ...state.submit, message: `${state.submit.message} [diag: ${diag}]` },
+  };
+}
+
 export function bookingReducer(state: State, action: Action): State {
   switch (action.type) {
     case "setMode":
@@ -205,20 +231,8 @@ export function bookingReducer(state: State, action: Action): State {
         result: action.result,
         turnstileToken: null,
       };
-    case "submitFailed": {
-      if (action.status === 422) {
-        return failedValidation(state, action.body);
-      }
-      const base: State = {
-        ...state,
-        turnstileToken: null,
-        submit: { status: "failed", message: failureMessage(action.status, action.body) },
-      };
-      if (action.status === 409) {
-        return { ...base, selectedStart: null };
-      }
-      return base;
-    }
+    case "submitFailed":
+      return withDiag(failedSubmit(state, action), action.diag);
     default:
       return state;
   }
