@@ -624,7 +624,7 @@ Cuerpo JSON (zod, se rechazan claves desconocidas):
 | `service_date` | `YYYY-MM-DD` | `Elige un día.` |
 | `start` | `HH:MM` con minutos `00` o `30` | `Elige un bloque.` |
 | `nombre` | trim, 2–80 | `Escribe tu nombre.` |
-| `telefono` | se normaliza quitando todo lo que no sea dígito: `569XXXXXXXX` (11 dígitos) o `9XXXXXXXX` (9 dígitos) → `+569XXXXXXXX`; cualquier otra forma es inválida | `Ingresa un celular chileno, por ejemplo +56 9 1234 5678.` |
+| `telefono` | se normaliza quitando todo lo que no sea dígito: `569XXXXXXXX` (11 dígitos) o `9XXXXXXXX` (9 dígitos) → `+569XXXXXXXX`; cualquier otra forma es inválida | `Faltan dígitos: son 8 después del +56 9.` |
 | `correo` | email, ≤ 254, se guarda en minúsculas | `Escribe un correo válido, por ejemplo nombre@correo.cl.` |
 | `bicicleta` | trim, 2–120 | `Cuéntanos la marca y el tipo de bici.` |
 | `descripcion` | trim, 5–1000 | `Cuéntanos qué necesita tu bici.` |

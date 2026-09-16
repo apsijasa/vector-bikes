@@ -139,7 +139,7 @@ const bookingSchema = z
       .string()
       .refine(
         (value) => normalizePhone(value) !== null,
-        "Ingresa un celular chileno, por ejemplo +56 9 1234 5678.",
+        "Faltan dígitos: son 8 después del +56 9.",
       ),
     correo: z
       .email("Escribe un correo válido, por ejemplo nombre@correo.cl.")
@@ -311,7 +311,7 @@ export async function handleCreateBooking(
     const phone = normalizePhone(data.telefono);
     if (phone === null) {
       return errorResponse(422, "validation_error", MESSAGES.validation, {
-        telefono: "Ingresa un celular chileno, por ejemplo +56 9 1234 5678.",
+        telefono: "Faltan dígitos: son 8 después del +56 9.",
       });
     }
 

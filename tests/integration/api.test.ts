@@ -121,9 +121,7 @@ describe("API pública", () => {
     const malTelefono = await handleCreateBooking(postRequest(body({ telefono: "12345" })), ctx);
     expect(malTelefono.status).toBe(422);
     const segundo = (await malTelefono.json()) as { fields: Record<string, string> };
-    expect(segundo.fields.telefono).toBe(
-      "Ingresa un celular chileno, por ejemplo +56 9 1234 5678.",
-    );
+    expect(segundo.fields.telefono).toBe("Faltan dígitos: son 8 después del +56 9.");
   });
 
   it("no reserva nada si Turnstile falla", async () => {
