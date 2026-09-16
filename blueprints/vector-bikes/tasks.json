@@ -309,7 +309,7 @@
     ],
     "checkpoint": "step-12-reminders-replit",
     "files": ["src/server/email/reminders.ts", "scripts/reminders-send.ts", "tests/integration/reminders.test.ts", "tests/unit/replit-config.test.ts", "README.md"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T6",
