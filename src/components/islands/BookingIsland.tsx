@@ -129,13 +129,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
         dispatch({ type: "submitSuccess", result: body as BookingResult });
         return;
       }
-      // TEMPORAL: `diag` con el código HTTP; quitar tras el diagnóstico.
-      dispatch({
-        type: "submitFailed",
-        status: response.status,
-        body,
-        diag: String(response.status),
-      });
+      dispatch({ type: "submitFailed", status: response.status, body });
       turnstile.reset();
       if (response.status === 422) {
         revealFirstError(formErrorsFrom(body.fields ?? {}));
@@ -143,10 +137,8 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       if (response.status === 409) {
         void loadAvailability(state.mode);
       }
-    } catch (error) {
-      // TEMPORAL: `diag` con el error capturado (fetch u otra excepción); quitar tras el diagnóstico.
-      const diag = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      dispatch({ type: "submitFailed", status: 0, body: {}, diag });
+    } catch {
+      dispatch({ type: "submitFailed", status: 0, body: {} });
       turnstile.reset();
     }
   }

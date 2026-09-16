@@ -58,8 +58,6 @@ export type Action =
       type: "submitFailed";
       status: number;
       body: { error?: string; code?: string; fields?: Record<string, string> };
-      /** TEMPORAL: detalle técnico que se agrega al mensaje (código HTTP o error de fetch). */
-      diag?: string;
     };
 
 const MESSAGES = {
@@ -167,18 +165,6 @@ function failedSubmit(state: State, action: Extract<Action, { type: "submitFaile
   return action.status === 409 ? { ...base, selectedStart: null } : base;
 }
 
-// TEMPORAL: diagnóstico del error de reserva en el navegador. Quitar junto con `diag`
-// en la acción y en BookingIsland.tsx cuando se identifique la causa.
-function withDiag(state: State, diag: string | undefined): State {
-  if (diag === undefined || state.submit.message === null) {
-    return state;
-  }
-  return {
-    ...state,
-    submit: { ...state.submit, message: `${state.submit.message} [diag: ${diag}]` },
-  };
-}
-
 export function bookingReducer(state: State, action: Action): State {
   switch (action.type) {
     case "setMode":
@@ -241,7 +227,7 @@ export function bookingReducer(state: State, action: Action): State {
         turnstileToken: null,
       };
     case "submitFailed":
-      return withDiag(failedSubmit(state, action), action.diag);
+      return failedSubmit(state, action);
     default:
       return state;
   }
