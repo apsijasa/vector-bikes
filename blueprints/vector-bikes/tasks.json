@@ -79,7 +79,7 @@
     ],
     "checkpoint": "step-03-slots",
     "files": ["src/data/feriados-cl.json", "src/server/booking/rules.ts", "src/server/booking/holidays.ts", "src/server/booking/slots.ts", "tests/unit/slots.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T4",
