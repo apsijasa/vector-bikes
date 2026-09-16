@@ -104,7 +104,7 @@
     ],
     "checkpoint": "step-04-booking-writes",
     "files": ["src/server/booking/tokens.ts", "src/server/booking/create-booking.ts", "src/server/booking/cancel-booking.ts", "tests/integration/create-booking.test.ts", "tests/integration/concurrency.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T5",
