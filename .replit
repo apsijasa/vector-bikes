@@ -12,3 +12,11 @@ run = ["sh", "-c", "HOST=0.0.0.0 PORT=4321 node dist/server/entry.mjs"]
 [[ports]]
 localPort = 4321
 externalPort = 80
+
+[packager]
+afterInstall = ""
+
+[packager.features]
+enabledForHosting = false
+guessImports = false
+packageSearch = false

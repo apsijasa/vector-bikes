@@ -3,12 +3,11 @@ packages:
   - "."
   - "!blueprints/**"
 
-# Scripts de instalación permitidos (verificado con pnpm 12.4.2: aprueba el postinstall de esbuild).
+# Scripts de instalación permitidos (aprueba el postinstall de esbuild).
 allowBuilds:
   esbuild: true
 
-# pnpm 12 exige una antigüedad mínima de publicación; estas versiones fijadas eran recientes el 2026-09-15.
-# pnpm las agrega solo en el primer install; se emiten ya presentes para que el archivo no cambie.
+# Excepciones a la antigüedad mínima de publicación para versiones fijadas.
 minimumReleaseAgeExclude:
   - '@vitest/mocker@5.0.1'
   - '@vitest/spy@5.0.1'
