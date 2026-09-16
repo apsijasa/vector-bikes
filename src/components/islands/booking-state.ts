@@ -95,15 +95,20 @@ function dayOf(state: State, date: string): ApiDay | undefined {
     : undefined;
 }
 
-function failureMessage(status: number, body: { error?: string; code?: string }): string {
-  if (status === 409) {
-    return body.error ?? "El bloque ya no está disponible";
+/** Respaldo por estado si la API no trae `error`. */
+const FALLBACK_BY_STATUS: Record<number, string> = {
+  403: MESSAGES.turnstile,
+  409: "El bloque ya no está disponible",
+  429: MESSAGES.rate,
+};
+
+/** El mensaje del servidor manda en 403, 409, 422 y 429; un 422 local no trae `error`. */
+function failureMessage(status: number, body: { error?: string; code?: string }): string | null {
+  if (status === 422) {
+    return body.error ?? null;
   }
-  if (status === 403) {
-    return MESSAGES.turnstile;
-  }
-  if (status === 429) {
-    return MESSAGES.rate;
+  if (status in FALLBACK_BY_STATUS) {
+    return body.error ?? FALLBACK_BY_STATUS[status] ?? MESSAGES.network;
   }
   return MESSAGES.network;
 }
@@ -170,11 +175,7 @@ export function bookingReducer(state: State, action: Action): State {
         submit: { status: "failed", message: failureMessage(action.status, action.body) },
       };
       if (action.status === 422) {
-        return {
-          ...base,
-          errors: { ...(action.body.fields ?? {}) },
-          submit: { status: "failed", message: null },
-        };
+        return { ...base, errors: { ...(action.body.fields ?? {}) } };
       }
       if (action.status === 409) {
         return { ...base, selectedStart: null };

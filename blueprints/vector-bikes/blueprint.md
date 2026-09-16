@@ -564,7 +564,7 @@ No hay seed de negocio: una base vacía ya es usable (la landing muestra días a
 - Validación: zod 4; esquemas en `src/server/api/handlers.ts`, junto al handler que los usa.
 - Paginación: NOT APPLICABLE en la API pública (disponibilidad acotada a 31 días); la agenda admin es por día.
 - Idempotencia: sin `Idempotency-Key`; la regla "1 reserva futura por teléfono" y el índice único convierten un reintento en 409, nunca en duplicado.
-- Rate limits: `POST /api/reservas` 5 por IP / 10 min (tabla `booking_requests`); login admin 5 fallidos por IP+correo / 15 min (tabla `login_attempts`). Almacenamiento en Postgres. IP = primer valor de `x-forwarded-for`, o `clientAddress` si falta.
+- Rate limits: `POST /api/reservas` 5 por IP / 10 min (tabla `booking_requests`; el límite se revisa antes de zod, pero solo cuentan los intentos que pasan la validación: un 422 no suma); login admin 5 fallidos por IP+correo / 15 min (tabla `login_attempts`). Almacenamiento en Postgres. IP = primer valor de `x-forwarded-for`, luego `x-real-ip`, luego `cf-connecting-ip`, o `clientAddress` si no hay ninguna.
 
 ### Rutas
 
@@ -1186,7 +1186,7 @@ git tag step-04-booking-writes
 - `src/server/api/turnstile.ts` — `verifyTurnstile(args: { token: string; ip: string | null; secret: string; fetchFn?: typeof fetch }): Promise<boolean>`: `POST https://challenges.cloudflare.com/turnstile/v0/siteverify` con cuerpo `URLSearchParams` (`secret`, `response`, y `remoteip` si hay IP); devuelve `true` solo si el JSON trae `success === true`; cualquier error de red o JSON → `false` (y log `turnstile.error`).
 - `src/server/api/handlers.ts` — sin imports de `astro`:
   - `type HandlerContext = { db: AppDb; now: Date; ip: string | null; fetchFn?: typeof fetch; onCreated?: (booking: Booking, cancelToken: string) => Promise<void> }`.
-  - `clientIp(request: Request, fallback: string | null): string | null` (primer valor de `x-forwarded-for`, recortado) y `hashIp(ip: string | null): string | null` (HMAC-SHA-256 hex con `getHashEnv().SESSION_SECRET`).
+  - `clientIp(request: Request, fallback: string | null): string | null` (primer valor de `x-forwarded-for`, luego `x-real-ip` y `cf-connecting-ip`, recortados; vacíos se ignoran) y `hashIp(ip: string | null): string | null` (HMAC-SHA-256 hex con `getHashEnv().SESSION_SECRET`).
   - `jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response` y `errorResponse(status, code, error, fields?)` con la forma de error de §5.
   - `normalizePhone(raw: string): string | null` según §5.
   - `handleAvailability(url: URL, ctx: HandlerContext): Promise<Response>` — zod para `desde`/`dias`/`modo` (§5); una consulta de bloques activos, bloqueos y conteo por fecha para el rango; `computeDay` por día; respuesta 200 con la forma exacta de §5.

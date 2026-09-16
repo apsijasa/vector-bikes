@@ -82,11 +82,23 @@ export function isAllowedOrigin(
   }
 }
 
-/** Primer valor de `x-forwarded-for`; si no hay, la IP que entrega el servidor. */
+/**
+ * IP del cliente detrás del proxy de Replit: primer valor de `x-forwarded-for`, luego
+ * `x-real-ip` y `cf-connecting-ip`; si no hay ninguna, la IP que entrega el servidor.
+ */
 export function clientIp(request: Request, fallback: string | null): string | null {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const first = forwarded?.split(",")[0]?.trim();
-  return first && first.length > 0 ? first : fallback;
+  const candidates = [
+    request.headers.get("x-forwarded-for")?.split(",")[0],
+    request.headers.get("x-real-ip"),
+    request.headers.get("cf-connecting-ip"),
+  ];
+  for (const candidate of candidates) {
+    const ip = candidate?.trim();
+    if (ip) {
+      return ip;
+    }
+  }
+  return fallback;
 }
 
 /** La IP nunca se guarda en claro. */
@@ -247,9 +259,13 @@ export async function handleAvailability(url: URL, ctx: HandlerContext): Promise
   return jsonResponse(200, { timezone: TIMEZONE, modo, capacity: DAILY_CAPACITY, days });
 }
 
-/** Cuenta y registra el intento. Devuelve la respuesta 429 cuando la IP se pasó del límite. */
-async function enforceRateLimit(ctx: HandlerContext): Promise<Response | null> {
-  const ipHash = hashIp(ctx.ip) ?? hashIp("sin-ip-conocida");
+function rateLimitKey(ctx: HandlerContext): string | null {
+  return hashIp(ctx.ip) ?? hashIp("sin-ip-conocida");
+}
+
+/** Devuelve la respuesta 429 cuando la IP se pasó del límite; no registra nada. */
+async function checkRateLimit(ctx: HandlerContext): Promise<Response | null> {
+  const ipHash = rateLimitKey(ctx);
   if (ipHash === null) {
     return null;
   }
@@ -263,8 +279,15 @@ async function enforceRateLimit(ctx: HandlerContext): Promise<Response | null> {
       "Retry-After": String(RATE_LIMIT_MINUTES * 60),
     });
   }
-  await ctx.db.insert(bookingRequests).values({ ipHash, createdAt: ctx.now });
   return null;
+}
+
+/** Registra el intento; solo cuentan los que pasaron la validación (un 422 no suma). */
+async function recordAttempt(ctx: HandlerContext): Promise<void> {
+  const ipHash = rateLimitKey(ctx);
+  if (ipHash !== null) {
+    await ctx.db.insert(bookingRequests).values({ ipHash, createdAt: ctx.now });
+  }
 }
 
 function localHhmm(instant: Date): string {
@@ -276,7 +299,7 @@ export async function handleCreateBooking(
   ctx: HandlerContext,
 ): Promise<Response> {
   try {
-    const limited = await enforceRateLimit(ctx);
+    const limited = await checkRateLimit(ctx);
     if (limited) {
       return limited;
     }
@@ -294,6 +317,13 @@ export async function handleCreateBooking(
       return errorResponse(422, "validation_error", MESSAGES.validation, fieldsOf(parsed.error));
     }
     const data = parsed.data;
+    const phone = normalizePhone(data.telefono);
+    if (phone === null) {
+      return errorResponse(422, "validation_error", MESSAGES.validation, {
+        telefono: "Faltan dígitos: son 8 después del +56 9.",
+      });
+    }
+    await recordAttempt(ctx);
 
     const token = data.turnstile_token ?? "";
     const human =
@@ -306,13 +336,6 @@ export async function handleCreateBooking(
       }));
     if (!human) {
       return errorResponse(403, "turnstile_failed", MESSAGES.turnstile);
-    }
-
-    const phone = normalizePhone(data.telefono);
-    if (phone === null) {
-      return errorResponse(422, "validation_error", MESSAGES.validation, {
-        telefono: "Faltan dígitos: son 8 después del +56 9.",
-      });
     }
 
     const result = await createBooking(

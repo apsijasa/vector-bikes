@@ -128,3 +128,44 @@ describe("teléfono con prefijo +56 9", () => {
     expect(validateForm(state).telefono).toBe("Faltan dígitos: son 8 después del +56 9.");
   });
 });
+
+describe("mensajes de error del envío", () => {
+  it.each([
+    [429, "Demasiados intentos desde tu conexión. Vuelve a intentar en 10 minutos."],
+    [403, "No pudimos verificar que eres una persona. Vuelve a intentar."],
+    [409, "Ya tienes una reserva próxima con este teléfono."],
+    [422, "Revisa los datos del formulario."],
+  ])("muestra el mensaje del servidor en un %i", (status, error) => {
+    const next = bookingReducer(initialState, {
+      type: "submitFailed",
+      status,
+      body: { error, fields: status === 422 ? { correo: "Escribe un correo válido." } : undefined },
+    });
+    expect(next.submit.message).toBe(error);
+  });
+
+  it("en un 422 conserva los errores por campo", () => {
+    const next = bookingReducer(initialState, {
+      type: "submitFailed",
+      status: 422,
+      body: { error: "Revisa los datos del formulario.", fields: { correo: "Escribe un correo." } },
+    });
+    expect(next.errors.correo).toBe("Escribe un correo.");
+  });
+
+  it("la validación local (422 sin error) no agrega mensaje general", () => {
+    const next = bookingReducer(initialState, {
+      type: "submitFailed",
+      status: 422,
+      body: { fields: { nombre: "Escribe tu nombre." } },
+    });
+    expect(next.submit.message).toBeNull();
+  });
+
+  it("usa un respaldo si la respuesta no trae mensaje", () => {
+    const next = bookingReducer(initialState, { type: "submitFailed", status: 429, body: {} });
+    expect(next.submit.message).toBe(
+      "Demasiados intentos. Espera unos minutos e intenta de nuevo.",
+    );
+  });
+});

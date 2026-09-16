@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type HandlerContext,
+  clientIp,
   handleAvailability,
   handleCreateBooking,
 } from "../../src/server/api/handlers.ts";
@@ -150,13 +151,31 @@ describe("API pública", () => {
   });
 
   it("corta en el sexto intento desde la misma IP", async () => {
+    const sinTurnstile = { ...ctx, fetchFn: fakeFetch(false) };
     for (let index = 0; index < 5; index += 1) {
-      await handleCreateBooking(postRequest(body({ start: "15:00", telefono: "12345" })), ctx);
+      const intento = await handleCreateBooking(postRequest(body()), sinTurnstile);
+      expect(intento.status).toBe(403);
     }
     const sexto = await handleCreateBooking(postRequest(body()), ctx);
     expect(sexto.status).toBe(429);
     expect(sexto.headers.get("Retry-After")).toBe("600");
-    expect((await sexto.json()) as { code: string }).toMatchObject({ code: "rate_limited" });
+    expect((await sexto.json()) as { code: string; error: string }).toMatchObject({
+      code: "rate_limited",
+      error: "Demasiados intentos desde tu conexión. Vuelve a intentar en 10 minutos.",
+    });
+  });
+
+  it("no cuenta los 422 para el límite por IP", async () => {
+    for (let index = 0; index < 6; index += 1) {
+      const invalido = await handleCreateBooking(postRequest(body({ telefono: "12345" })), ctx);
+      expect(invalido.status).toBe(422);
+    }
+    const noJson = new Request("https://vectorbikes.cl/api/reservas", {
+      method: "POST",
+      body: "{",
+    });
+    expect((await handleCreateBooking(noJson, ctx)).status).toBe(422);
+    expect((await handleCreateBooking(postRequest(body()), ctx)).status).toBe(201);
   });
 
   it("mantiene el 201 aunque el aviso post-commit falle", async () => {
@@ -166,5 +185,29 @@ describe("API pública", () => {
     const response = await handleCreateBooking(postRequest(body()), { ...ctx, onCreated });
     expect(response.status).toBe(201);
     expect(onCreated).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("clientIp", () => {
+  const request = (headers: Record<string, string>) =>
+    new Request("https://vectorbikes.cl/api/reservas", { headers });
+
+  it("toma el primer valor de x-forwarded-for", () => {
+    const ip = clientIp(request({ "x-forwarded-for": "190.5.1.2, 10.0.0.1" }), "10.0.0.9");
+    expect(ip).toBe("190.5.1.2");
+  });
+
+  it("sigue con x-real-ip y luego cf-connecting-ip", () => {
+    expect(
+      clientIp(request({ "x-real-ip": "190.5.1.3", "cf-connecting-ip": "190.5.1.4" }), null),
+    ).toBe("190.5.1.3");
+    expect(clientIp(request({ "cf-connecting-ip": "190.5.1.4" }), null)).toBe("190.5.1.4");
+  });
+
+  it("ignora cabeceras vacías y usa la IP del servidor al final", () => {
+    expect(clientIp(request({ "x-forwarded-for": " ", "x-real-ip": "" }), "10.0.0.9")).toBe(
+      "10.0.0.9",
+    );
+    expect(clientIp(request({}), null)).toBeNull();
   });
 });

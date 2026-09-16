@@ -148,6 +148,9 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       }
       dispatch({ type: "submitFailed", status: response.status, body });
       window.turnstile?.reset();
+      if (response.status === 422) {
+        focusFirstError(body.fields ?? {});
+      }
       if (response.status === 409) {
         void loadAvailability(state.mode);
       }
