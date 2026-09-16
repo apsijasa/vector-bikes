@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useReducer, useRef } from "preact/hooks";
 import { BookingFields, FIELD_IDS } from "./BookingFields.tsx";
-import { BlockFieldset, DayFieldset, ModeFieldset } from "./BookingSchedule.tsx";
+import { BLOCK_FIELDSET_ID, BlockFieldset, DayFieldset, ModeFieldset } from "./BookingSchedule.tsx";
 import { BookingTicket } from "./BookingTicket.tsx";
 import {
   type ApiDay,
   type BookingResult,
-  type FormValues,
+  type FormErrors,
   type Mode,
   bookingReducer,
+  firstErrorTarget,
+  formErrorsFrom,
   initialState,
   parseResponseBody,
   phoneE164,
@@ -97,11 +99,27 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
     document.head.append(script);
   }, [siteKey]);
 
-  function focusFirstError(errors: Partial<Record<keyof FormValues | "bloque", string>>): void {
-    const first = (Object.keys(FIELD_IDS) as (keyof FormValues)[]).find((key) => errors[key]);
-    if (first) {
-      formRef.current?.querySelector<HTMLElement>(`#${FIELD_IDS[first]}`)?.focus();
+  /** Foco y desplazamiento al primer error; el bloque lleva a la regla de horarios. */
+  function revealFirstError(errors: FormErrors): void {
+    const target = firstErrorTarget(errors);
+    const form = formRef.current;
+    if (target === null || form === null) {
+      return;
     }
+    let focusOn: HTMLElement | null;
+    let scrollTo: HTMLElement | null;
+    if (target === "bloque") {
+      const fieldset = form.querySelector<HTMLElement>(`#${BLOCK_FIELDSET_ID}`);
+      scrollTo = fieldset?.querySelector<HTMLElement>(".ruler-box") ?? fieldset;
+      focusOn =
+        fieldset?.querySelector<HTMLElement>('.slot:not([aria-disabled="true"])') ?? fieldset;
+    } else {
+      focusOn = form.querySelector<HTMLElement>(`#${FIELD_IDS[target]}`);
+      scrollTo = focusOn;
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    focusOn?.focus({ preventScroll: true });
+    scrollTo?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
   }
 
   function requestBody(): string {
@@ -129,7 +147,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
         status: 422,
         body: { fields: errors as Record<string, string> },
       });
-      focusFirstError(errors);
+      revealFirstError(errors);
       return;
     }
     dispatch({ type: "submitStart" });
@@ -149,7 +167,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       dispatch({ type: "submitFailed", status: response.status, body });
       window.turnstile?.reset();
       if (response.status === 422) {
-        focusFirstError(body.fields ?? {});
+        revealFirstError(formErrorsFrom(body.fields ?? {}));
       }
       if (response.status === 409) {
         void loadAvailability(state.mode);

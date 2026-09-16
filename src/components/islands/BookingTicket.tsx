@@ -45,6 +45,11 @@ export function BookingTicket({
       </div>
       {!done && (
         <div class="ticket-foot">
+          {state.submit.message && (
+            <p class="err" role="alert">
+              {state.submit.message}
+            </p>
+          )}
           <button
             type="submit"
             class="btn"
@@ -53,7 +58,6 @@ export function BookingTicket({
           >
             {state.submit.status === "submitting" ? "Confirmando…" : "Confirmar reserva"}
           </button>
-          {state.submit.message && <p class="err">{state.submit.message}</p>}
           <p>
             El diagnóstico y los repuestos se cotizan en el taller. Si hay un trabajo extra, te
             llamamos antes.

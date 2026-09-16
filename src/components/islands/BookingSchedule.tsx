@@ -186,6 +186,8 @@ function Ruler({
   );
 }
 
+export const BLOCK_FIELDSET_ID = "f-bloque";
+
 function blockNote(day: ApiDay | undefined, isPickup: boolean): string {
   if (!day) {
     return "Elige un día para ver sus bloques.";
@@ -211,7 +213,7 @@ export function BlockFieldset({
   onPick: (start: string) => void;
 }) {
   return (
-    <fieldset>
+    <fieldset id={BLOCK_FIELDSET_ID} tabIndex={-1}>
       <legend>
         <span class="mono">3</span> Bloque
       </legend>

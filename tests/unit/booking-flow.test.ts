@@ -74,6 +74,29 @@ describe("error del envío visible en la boleta", () => {
   });
 });
 
+describe("validación local en la boleta", () => {
+  it("el mensaje general aparece sobre el botón, con role=alert", () => {
+    const state = bookingReducer(initialState, {
+      type: "submitFailed",
+      status: 422,
+      body: { fields: { bloque: "Elige un bloque libre para continuar." } },
+    });
+    const ticket = BookingTicket({ state, chosen: [], isPickup: false }) as VNode<{
+      children: unknown[];
+    }>;
+    const foot = (ticket.props.children as VNode<{ class?: string; children: VNode[] }>[])
+      .flat()
+      .find((child) => child?.props?.class === "ticket-foot");
+    const [first, second] = (foot?.props.children ?? []).filter(Boolean) as VNode<{
+      role?: string;
+      id?: string;
+    }>[];
+    expect(first?.props.role).toBe("alert");
+    expect(textOf(first)).toBe("Elige un bloque libre para continuar.");
+    expect(second?.props.id).toBe("submit");
+  });
+});
+
 describe("hora de la boleta", () => {
   const at = (mode: State["mode"], start: string): State => ({
     ...initialState,

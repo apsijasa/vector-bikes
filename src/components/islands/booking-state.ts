@@ -64,7 +64,47 @@ const MESSAGES = {
   rate: "Demasiados intentos. Espera unos minutos e intenta de nuevo.",
   network: "No pudimos confirmar tu reserva. Intenta de nuevo en un momento.",
   block: "Elige un bloque libre para continuar.",
+  fields: "Revisa los campos marcados y vuelve a intentar.",
 } as const;
+
+export type FormErrors = Partial<Record<keyof FormValues | "bloque", string>>;
+
+/** Orden visual de los campos: el primero con error recibe el foco. */
+export const FIELD_ORDER: readonly (keyof FormValues)[] = [
+  "nombre",
+  "telefono",
+  "correo",
+  "bicicleta",
+  "descripcion",
+  "comuna",
+  "direccion",
+  "consentimiento",
+];
+
+/** Dónde llevar al usuario: el bloque va antes que los campos, igual que en pantalla. */
+export function firstErrorTarget(errors: FormErrors): "bloque" | keyof FormValues | null {
+  if (errors.bloque) {
+    return "bloque";
+  }
+  return FIELD_ORDER.find((field) => errors[field]) ?? null;
+}
+
+/** Errores del servidor con las claves de la isla: `service_date` y `start` son el bloque. */
+export function formErrorsFrom(fields: Record<string, string>): FormErrors {
+  const { service_date: serviceDate, start, ...rest } = fields;
+  const bloque = start ?? serviceDate;
+  return { ...(rest as FormErrors), ...(bloque ? { bloque } : {}) };
+}
+
+/** 422 local o del servidor: marca los campos y deja siempre un mensaje general. */
+function failedValidation(
+  state: State,
+  body: { error?: string; fields?: Record<string, string> },
+): State {
+  const errors = formErrorsFrom(body.fields ?? {});
+  const message = errors.bloque ? MESSAGES.block : (body.error ?? MESSAGES.fields);
+  return { ...state, turnstileToken: null, errors, submit: { status: "failed", message } };
+}
 
 const EMPTY_FORM: FormValues = {
   nombre: "",
@@ -102,11 +142,8 @@ const FALLBACK_BY_STATUS: Record<number, string> = {
   429: MESSAGES.rate,
 };
 
-/** El mensaje del servidor manda en 403, 409, 422 y 429; un 422 local no trae `error`. */
-function failureMessage(status: number, body: { error?: string; code?: string }): string | null {
-  if (status === 422) {
-    return body.error ?? null;
-  }
+/** El mensaje del servidor manda en 403, 409 y 429 (el 422 va por `failedValidation`). */
+function failureMessage(status: number, body: { error?: string; code?: string }): string {
   if (status in FALLBACK_BY_STATUS) {
     return body.error ?? FALLBACK_BY_STATUS[status] ?? MESSAGES.network;
   }
@@ -169,14 +206,14 @@ export function bookingReducer(state: State, action: Action): State {
         turnstileToken: null,
       };
     case "submitFailed": {
+      if (action.status === 422) {
+        return failedValidation(state, action.body);
+      }
       const base: State = {
         ...state,
         turnstileToken: null,
         submit: { status: "failed", message: failureMessage(action.status, action.body) },
       };
-      if (action.status === 422) {
-        return { ...base, errors: { ...(action.body.fields ?? {}) } };
-      }
       if (action.status === 409) {
         return { ...base, selectedStart: null };
       }
@@ -188,8 +225,8 @@ export function bookingReducer(state: State, action: Action): State {
 }
 
 /** Mismas reglas y mensajes que el servidor; la autoridad sigue siendo la API. */
-export function validateForm(state: State): Partial<Record<keyof FormValues | "bloque", string>> {
-  const errors: Partial<Record<keyof FormValues | "bloque", string>> = {};
+export function validateForm(state: State): FormErrors {
+  const errors: FormErrors = {};
   const { form } = state;
 
   if (state.selectedDate === null || state.selectedStart === null) {

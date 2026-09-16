@@ -827,6 +827,10 @@ p {
   font-size: 0.8rem;
   color: var(--steel);
 }
+.ticket-foot .err {
+  color: var(--ink);
+  font-weight: 600;
+}
 .done {
   padding: 18px;
   border-top: 1px solid var(--ink);

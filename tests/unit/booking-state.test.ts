@@ -3,6 +3,8 @@ import {
   type ApiDay,
   type State,
   bookingReducer,
+  firstErrorTarget,
+  formErrorsFrom,
   formatClp,
   initialState,
   phoneE164,
@@ -153,13 +155,13 @@ describe("mensajes de error del envío", () => {
     expect(next.errors.correo).toBe("Escribe un correo.");
   });
 
-  it("la validación local (422 sin error) no agrega mensaje general", () => {
+  it("un 422 del servidor sin texto general deja el mensaje de revisar campos", () => {
     const next = bookingReducer(initialState, {
       type: "submitFailed",
       status: 422,
       body: { fields: { nombre: "Escribe tu nombre." } },
     });
-    expect(next.submit.message).toBeNull();
+    expect(next.submit.message).toBe("Revisa los campos marcados y vuelve a intentar.");
   });
 
   it("usa un respaldo si la respuesta no trae mensaje", () => {
@@ -167,5 +169,60 @@ describe("mensajes de error del envío", () => {
     expect(next.submit.message).toBe(
       "Demasiados intentos. Espera unos minutos e intenta de nuevo.",
     );
+  });
+});
+
+describe("validación fallida", () => {
+  const failLocally = (state: State) =>
+    bookingReducer(state, {
+      type: "submitFailed",
+      status: 422,
+      body: { fields: validateForm(state) as Record<string, string> },
+    });
+
+  const withBlock: State = {
+    ...ready([day("2026-09-16")]),
+    selectedDate: "2026-09-16",
+    selectedStart: "16:00",
+  };
+
+  it("la validación local deja un mensaje general, no null", () => {
+    const next = failLocally(withBlock);
+    expect(next.submit.message).toBe("Revisa los campos marcados y vuelve a intentar.");
+    expect(next.errors.nombre).toBe("Escribe tu nombre.");
+  });
+
+  it("sin bloque elegido, el mensaje general es el del bloque", () => {
+    const next = failLocally(initialState);
+    expect(next.submit.message).toBe("Elige un bloque libre para continuar.");
+    expect(next.errors.bloque).toBe("Elige un bloque libre para continuar.");
+  });
+
+  it("elige el bloque antes que cualquier campo", () => {
+    expect(firstErrorTarget(validateForm(initialState))).toBe("bloque");
+  });
+
+  it("elige el primer campo en el orden de la pantalla", () => {
+    expect(firstErrorTarget({ correo: "x", telefono: "x", consentimiento: "x" })).toBe("telefono");
+    expect(firstErrorTarget({ direccion: "x", comuna: "x" })).toBe("comuna");
+    expect(firstErrorTarget(validateForm(withBlock))).toBe("nombre");
+    expect(firstErrorTarget({})).toBeNull();
+  });
+
+  it("un 422 del servidor sobre service_date o start marca el bloque", () => {
+    expect(formErrorsFrom({ start: "Elige un bloque.", correo: "x" })).toEqual({
+      bloque: "Elige un bloque.",
+      correo: "x",
+    });
+    const next = bookingReducer(initialState, {
+      type: "submitFailed",
+      status: 422,
+      body: {
+        error: "Revisa los datos del formulario.",
+        fields: { service_date: "Elige un día." },
+      },
+    });
+    expect(next.errors.bloque).toBe("Elige un día.");
+    expect(firstErrorTarget(next.errors)).toBe("bloque");
   });
 });
