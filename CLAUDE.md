@@ -69,7 +69,7 @@ Astro 7 (output server, @astrojs/node standalone) · TypeScript 6 · Preact (1 i
 4. La lógica de `src/server/**` recibe `db: AppDb` y `now: Date`; nunca `new Date()` dentro de la lógica.
 5. Toda entrada externa pasa por zod antes de tocar `src/server/**`.
 6. Ningún correo, `fetch` ni espera larga dentro de una transacción.
-7. Archivos < 400 líneas, funciones < 50 líneas.
+7. Archivos < 400 líneas, funciones < 50 líneas. **Única excepción: `src/styles/global.css`** — es el diseño aprobado portado desde `docs/design-preview.html` y partirlo fragmentaría el sistema visual; su tamaño lo fija el prototipo, no el autor.
 8. Textos para el usuario en español de Chile; identificadores en inglés.
 9. Todo elemento no-void cerrado en `.astro` (Astro 7 falla si no).
 10. `set:html` solo para el JSON-LD de `Base.astro`.

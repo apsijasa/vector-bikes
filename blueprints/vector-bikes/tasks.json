@@ -55,7 +55,7 @@
     ],
     "checkpoint": "step-02-database",
     "files": ["src/server/db/schema.ts", "src/server/db/client.ts", "tests/helpers/pglite.ts", "tests/integration/foundation.test.ts", "src/pages/api/health.ts", "drizzle/**"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T3",
