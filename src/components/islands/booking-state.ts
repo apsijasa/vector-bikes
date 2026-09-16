@@ -143,7 +143,13 @@ export function bookingReducer(state: State, action: Action): State {
     case "setField":
       return {
         ...state,
-        form: { ...state.form, [action.field]: action.value },
+        form: {
+          ...state.form,
+          [action.field]:
+            action.field === "telefono" && typeof action.value === "string"
+              ? formatPhoneLocal(action.value)
+              : action.value,
+        },
         errors: { ...state.errors, [action.field]: undefined },
       };
     case "setTurnstile":
@@ -191,8 +197,8 @@ export function validateForm(state: State): Partial<Record<keyof FormValues | "b
   if (form.nombre.trim().length < 2 || form.nombre.trim().length > 80) {
     errors.nombre = "Escribe tu nombre.";
   }
-  if (normalizePhone(form.telefono) === null) {
-    errors.telefono = "Ingresa un celular chileno, por ejemplo +56 9 1234 5678.";
+  if (phoneE164(form.telefono) === null) {
+    errors.telefono = "Faltan dígitos: son 8 después del +56 9.";
   }
   const correo = form.correo.trim();
   if (correo.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
@@ -218,16 +224,22 @@ export function validateForm(state: State): Partial<Record<keyof FormValues | "b
   return errors;
 }
 
-/** `569XXXXXXXX` u `9XXXXXXXX` → `+569XXXXXXXX`. */
-export function normalizePhone(raw: string): string | null {
+/** Dígitos tras el `+56 9` fijo; de un número pegado completo quedan los 8 finales. */
+export function phoneLocalDigits(raw: string): string {
   const digits = raw.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("569")) {
-    return `+${digits}`;
-  }
-  if (digits.length === 9 && digits.startsWith("9")) {
-    return `+56${digits}`;
-  }
-  return null;
+  return digits.length > 8 ? digits.slice(-8) : digits;
+}
+
+/** `12345678` → `1234 5678`, también a medio escribir. */
+export function formatPhoneLocal(raw: string): string {
+  const digits = phoneLocalDigits(raw);
+  return digits.length > 4 ? `${digits.slice(0, 4)} ${digits.slice(4)}` : digits;
+}
+
+/** `1234 5678` → `+56912345678`, el formato que espera la API. */
+export function phoneE164(raw: string): string | null {
+  const digits = phoneLocalDigits(raw);
+  return digits.length === 8 ? `+569${digits}` : null;
 }
 
 /** `retiro` ocupa el bloque elegido y el siguiente. */

@@ -9,7 +9,7 @@ import {
   type Mode,
   bookingReducer,
   initialState,
-  normalizePhone,
+  phoneE164,
   selectedBlocks,
   validateForm,
 } from "./booking-state.ts";
@@ -109,7 +109,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       service_date: state.selectedDate,
       start: state.selectedStart,
       nombre: state.form.nombre.trim(),
-      telefono: normalizePhone(state.form.telefono) ?? state.form.telefono,
+      telefono: phoneE164(state.form.telefono) ?? state.form.telefono,
       correo: state.form.correo.trim(),
       bicicleta: state.form.bicicleta.trim(),
       descripcion: state.form.descripcion.trim(),

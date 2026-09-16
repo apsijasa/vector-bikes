@@ -5,6 +5,7 @@ import {
   bookingReducer,
   formatClp,
   initialState,
+  phoneE164,
   selectedBlocks,
   ticketCode,
   validateForm,
@@ -97,5 +98,33 @@ describe("bookingReducer", () => {
   it("arma el código de la orden y el recargo", () => {
     expect(ticketCode("2026-09-16", "16:30")).toBe("VB-260916-1630");
     expect(formatClp(15000)).toBe("$15.000");
+  });
+});
+
+describe("teléfono con prefijo +56 9", () => {
+  const typed = (value: string) =>
+    bookingReducer(initialState, { type: "setField", field: "telefono", value }).form.telefono;
+
+  it.each(["+56912345678", "56912345678", "912345678", "12345678"])(
+    "normaliza %s pegado a los 8 dígitos finales",
+    (pasted) => {
+      expect(typed(pasted)).toBe("1234 5678");
+      expect(phoneE164(typed(pasted))).toBe("+56912345678");
+    },
+  );
+
+  it("formatea mientras se escribe y descarta lo que no es dígito", () => {
+    expect(typed("123")).toBe("123");
+    expect(typed("12345")).toBe("1234 5");
+    expect(typed("12a3-4 56")).toBe("1234 56");
+  });
+
+  it("7 dígitos siguen siendo inválidos", () => {
+    const state: State = {
+      ...initialState,
+      form: { ...initialState.form, telefono: typed("1234567") },
+    };
+    expect(phoneE164(state.form.telefono)).toBeNull();
+    expect(validateForm(state).telefono).toBe("Faltan dígitos: son 8 después del +56 9.");
   });
 });

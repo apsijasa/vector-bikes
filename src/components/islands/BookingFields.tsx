@@ -40,6 +40,7 @@ function Field({
   label,
   error,
   help,
+  alert,
   hidden,
   full,
   children,
@@ -48,6 +49,7 @@ function Field({
   label: preact.ComponentChildren;
   error?: string;
   help?: string;
+  alert?: boolean;
   hidden?: boolean;
   full?: boolean;
   children: preact.ComponentChildren;
@@ -57,12 +59,44 @@ function Field({
     <div class={classes} hidden={hidden}>
       <label for={id}>{label}</label>
       {children}
-      {help && !error && <span class="help">{help}</span>}
+      {help && !error && (
+        <span class="help" id={`help-${id}`}>
+          {help}
+        </span>
+      )}
       {error && (
-        <span class="err" id={`err-${id}`}>
+        <span class="err" id={`err-${id}`} role={alert ? "alert" : undefined}>
           {error}
         </span>
       )}
+    </div>
+  );
+}
+
+/** Prefijo `+56 9` fijo dentro del recuadro; el usuario escribe solo los 8 dígitos. */
+function PhoneInput(props: FieldsProps) {
+  const error = props.errors.telefono;
+  const onPaste = (event: ClipboardEvent) => {
+    const text = event.clipboardData?.getData("text") ?? "";
+    // Sin esto, maxlength cortaría un +56912345678 pegado antes de normalizarlo.
+    event.preventDefault();
+    props.onField("telefono", text);
+  };
+  return (
+    <div class="phone">
+      <span class="phone-prefix" id="pre-f-tel">
+        +56 9
+      </span>
+      <input
+        {...bind(props, "telefono")}
+        aria-describedby={`pre-f-tel ${error ? "err-f-tel" : "help-f-tel"}`}
+        onPaste={onPaste}
+        type="tel"
+        autocomplete="tel-national"
+        inputmode="numeric"
+        maxlength={9}
+        placeholder="1234 5678"
+      />
     </div>
   );
 }
@@ -81,16 +115,11 @@ export function BookingFields(props: FieldsProps) {
         <Field
           id="f-tel"
           label="Teléfono"
-          help="Te llamamos a este número si encontramos algo extra."
+          help="8 dígitos, sin el 9 inicial."
           error={errors.telefono}
+          alert
         >
-          <input
-            {...bind(props, "telefono")}
-            type="tel"
-            autocomplete="tel"
-            inputmode="tel"
-            placeholder="+56 9 1234 5678"
-          />
+          <PhoneInput {...props} />
         </Field>
         <Field
           id="f-mail"
