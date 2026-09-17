@@ -1,7 +1,8 @@
 ---
 import Base from "../../layouts/Base.astro";
+import { log } from "../../lib/log.ts";
 import { SITE } from "../../lib/site.ts";
-import { isAllowedOrigin } from "../../server/api/handlers.ts";
+import { originForLog } from "../../server/api/handlers.ts";
 import {
   type CancellationView,
   performCancellation,
@@ -17,25 +18,22 @@ Astro.response.headers.set("referrer-policy", "no-referrer");
 
 const now = new Date();
 let token: string | null = null;
-let result: CancellationView | { view: "forbidden" };
+let result: CancellationView;
 
 if (Astro.request.method === "POST") {
-  if (isAllowedOrigin(Astro.request)) {
-    const form = await Astro.request.formData();
-    const raw = form.get("token");
-    token = typeof raw === "string" ? raw : null;
-    result = await performCancellation(getDb(), token, now);
-  } else {
-    result = { view: "forbidden" };
-  }
+  // Sin chequeo de Origin: el token del correo es la defensa (ver .claude/rules/server-api.md).
+  // El origen queda registrado solo para saber qué mandan los navegadores y visores reales.
+  log.info("cancel.origin", { origin: originForLog(Astro.request) });
+  const form = await Astro.request.formData();
+  const raw = form.get("token");
+  token = typeof raw === "string" ? raw : null;
+  result = await performCancellation(getDb(), token, now);
 } else {
   token = Astro.url.searchParams.get("token");
   result = await viewCancellation(getDb(), token, now);
 }
 
-if (result.view === "forbidden") {
-  Astro.response.status = 403;
-} else if (result.view === "invalid") {
+if (result.view === "invalid") {
   Astro.response.status = 404;
 }
 
@@ -47,7 +45,6 @@ const HEADINGS = {
   cancelled: "Esta reserva ya estaba cancelada",
   started: "Esta reserva ya no se puede cancelar",
   invalid: "Enlace no válido",
-  forbidden: "No pudimos confirmar la solicitud",
 } as const;
 
 const MESSAGES = {
@@ -57,7 +54,6 @@ const MESSAGES = {
   cancelled: "No hay nada más que hacer. Si quieres, puedes reservar otra hora.",
   started: `La hora de tu reserva ya pasó o el taller ya la cerró. Si necesitas algo, escríbenos a ${SITE.email}.`,
   invalid: `Revisa que el enlace esté completo, tal como llegó en tu correo. Si el problema sigue, escríbenos a ${SITE.email}.`,
-  forbidden: "Abre de nuevo el enlace de tu correo e intenta cancelar desde esa página.",
 } as const;
 ---
 

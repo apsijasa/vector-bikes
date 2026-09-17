@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isAllowedOrigin } from "../../src/server/api/handlers.ts";
+import { isAllowedOrigin, originForLog } from "../../src/server/api/handlers.ts";
 import { performCancellation, viewCancellation } from "../../src/server/booking/cancel-flow.ts";
 import { createBooking } from "../../src/server/booking/create-booking.ts";
 import type { AppDb } from "../../src/server/db/client.ts";
@@ -137,6 +137,92 @@ describe("cancelación con token", () => {
     expect(notify).toHaveBeenCalledTimes(1);
     const [row] = await test.db.select().from(bookings).where(eq(bookings.id, booking.id));
     expect(row?.status).toBe("cancelled");
+  });
+});
+
+/**
+ * El POST de /reservas/cancelar ya no exige `Origin`: el token del correo es la defensa.
+ * Estas pruebas reproducen el camino de la página con peticiones reales.
+ */
+describe("POST de cancelación sin Origin", () => {
+  let test: TestDb;
+
+  beforeEach(async () => {
+    consoleOutbox.length = 0;
+    test = await createTestDb();
+    return () => test.close();
+  });
+
+  /** Lo que hace la página: leer el token del formulario, sin mirar el origen. */
+  const postWith = (token: string, headers: Record<string, string> = {}) => {
+    const body = new FormData();
+    body.set("token", token);
+    return new Request("https://vectorbikes.cl/reservas/cancelar", {
+      method: "POST",
+      headers,
+      body,
+    });
+  };
+
+  async function submit(request: Request) {
+    const form = await request.formData();
+    const raw = form.get("token");
+    return performCancellation(test.db, typeof raw === "string" ? raw : null, NOW);
+  }
+
+  it("un token válido cancela aunque no venga la cabecera Origin", async () => {
+    const { cancelToken, booking } = await newBooking(test.db);
+
+    const result = await submit(postWith(cancelToken));
+
+    expect(result.view).toBe("done");
+    const [row] = await test.db.select().from(bookings).where(eq(bookings.id, booking.id));
+    expect(row?.status).toBe("cancelled");
+  });
+
+  it("un token válido cancela con el Origin de un visor de correo", async () => {
+    const { cancelToken, booking } = await newBooking(test.db);
+
+    const result = await submit(postWith(cancelToken, { origin: "https://mail.google.com" }));
+
+    expect(result.view).toBe("done");
+    const [row] = await test.db.select().from(bookings).where(eq(bookings.id, booking.id));
+    expect(row?.status).toBe("cancelled");
+  });
+
+  it("un token inválido sigue fallando sin tocar nada", async () => {
+    await newBooking(test.db);
+    const before = await snapshot(test.db);
+
+    expect(await submit(postWith("a".repeat(43)))).toEqual({ view: "invalid" });
+    expect(await submit(postWith("corto"))).toEqual({ view: "invalid" });
+    expect(await submit(postWith("", { origin: "https://vectorbikes.cl" }))).toEqual({
+      view: "invalid",
+    });
+
+    expect(await snapshot(test.db)).toBe(before);
+    expect(consoleOutbox).toHaveLength(0);
+  });
+});
+
+describe("originForLog", () => {
+  const post = (origin?: string) =>
+    new Request("https://vectorbikes.cl/reservas/cancelar", {
+      method: "POST",
+      headers: origin === undefined ? {} : { origin },
+    });
+
+  it("registra solo el origen, nunca la ruta ni la consulta", () => {
+    expect(originForLog(post("https://mail.google.com"))).toBe("https://mail.google.com");
+    expect(originForLog(post("https://www.vectorbikes.cl"))).toBe("https://www.vectorbikes.cl");
+    expect(originForLog(post("http://localhost:4321"))).toBe("http://localhost:4321");
+  });
+
+  it("distingue ausente, opaco y no válido", () => {
+    expect(originForLog(post())).toBe("ausente");
+    expect(originForLog(post(""))).toBe("ausente");
+    expect(originForLog(post("null"))).toBe("null");
+    expect(originForLog(post("basura"))).toBe("no-valido");
   });
 });
 

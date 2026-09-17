@@ -577,7 +577,7 @@ No hay seed de negocio: una base vacía ya es usable (la landing muestra días a
 | GET | `/api/disponibilidad?desde=YYYY-MM-DD&dias=1..31&modo=taller\|retiro` | Días y bloques | pública | — |
 | POST | `/api/reservas` | Crea una reserva | pública + Turnstile | 5 / IP / 10 min |
 | GET | `/reservas/cancelar?token=` | Página de confirmación de cancelación | token | — |
-| POST | `/reservas/cancelar` | Cancela (form `token`) | token + Origin | — |
+| POST | `/reservas/cancelar` | Cancela (form `token`) | token (sin Origin, decisión 22) | — |
 | GET/POST | `/admin/login` | Formulario / inicio de sesión | pública | 5 fallidos / IP+correo / 15 min |
 | POST | `/admin/logout` | Revoca la sesión | admin + Origin | — |
 | GET | `/admin?fecha=YYYY-MM-DD` | Agenda del día (default: hoy local) | admin | — |
@@ -643,7 +643,7 @@ Respuesta 201:
 Efectos: 1 fila en `bookings`, 1 (`taller`) o 2 (`retiro`) filas activas en `booking_blocks`, 1 fila en `booking_days` si no existía, 1 fila en `booking_requests`; correos 1 (cliente, con `reserva-vector-bikes.ics` y enlace `<PUBLIC_SITE_URL>/reservas/cancelar?token=<token>`) y 2 (taller).
 
 #### `GET|POST /reservas/cancelar`
-GET con `token`: busca por `cancel_token_hash = HMAC(token)`. Casos, cada uno con su texto en la página: token inexistente → `Este enlace no es válido.`; ya cancelada → `Esta reserva ya fue cancelada.`; `starts_at <= ahora` → `Tu reserva ya comenzó. Si necesitas algo, llámanos o escríbenos a info@vectorbikes.cl.`; confirmada y futura → resumen (código, día, hora, modalidad) y botón `Cancelar reserva` (form POST con `token` oculto). POST: verifica Origin, repite las validaciones y en **una transacción** pone `status='cancelled'`, `cancelled_at`, `cancelled_by='customer'`, `cancel_token_used_at`, y `is_active=false` en sus bloques; después del commit envía el correo 4 al taller. Un segundo POST con el mismo token muestra `Esta reserva ya fue cancelada.` y no cambia filas.
+GET con `token`: busca por `cancel_token_hash = HMAC(token)`. Casos, cada uno con su texto en la página: token inexistente → `Este enlace no es válido.`; ya cancelada → `Esta reserva ya fue cancelada.`; `starts_at <= ahora` → `Tu reserva ya comenzó. Si necesitas algo, llámanos o escríbenos a info@vectorbikes.cl.`; confirmada y futura → resumen (código, día, hora, modalidad) y botón `Cancelar reserva` (form POST con `token` oculto). POST: repite las validaciones (sin chequeo de `Origin`, decisión 22; registra el origen recibido como `cancel.origin`) y en **una transacción** pone `status='cancelled'`, `cancelled_at`, `cancelled_by='customer'`, `cancel_token_used_at`, y `is_active=false` en sus bloques; después del commit envía el correo 4 al taller. Un segundo POST con el mismo token muestra `Esta reserva ya fue cancelada.` y no cambia filas.
 
 #### `GET /api/health`
 Ejecuta `select 1` con el cliente de `src/server/db/client.ts`. `200 {"ok":true,"db":true}` o `503 {"ok":false,"db":false}`; `cache-control: no-store`. (En el paso 1, antes de existir la base, responde `200 {"ok":true,"db":false}`.)
@@ -1385,6 +1385,8 @@ git tag step-08-emails
 - [ ] WHEN the booking has already started THE SYSTEM SHALL return the `started` view and keep `status` `confirmed`.
 - [ ] WHEN a POST carries an `Origin` different from the origin of `PUBLIC_SITE_URL` THE SYSTEM SHALL reject it (`isAllowedOrigin` returns `false`).
 
+> **Cambio posterior (2026-09-17, decisión 22).** El POST de `/reservas/cancelar` dejó de chequear `Origin`: rompía la cancelación desde visores de correo y el token ya es la defensa. `isAllowedOrigin` queda solo para admin y acepta el host con y sin `www.`. El último criterio de este paso vale hoy únicamente para los POST de `/admin/**`.
+
 **Verify**
 ```bash
 pnpm format                                        # expect: exit 0
@@ -1914,7 +1916,7 @@ Cada test crea su propio PGlite en memoria con `createTestDb()` (aplica las migr
 | Codificación de salida / XSS | Astro escapa por defecto; prohibido `set:html` salvo el JSON-LD generado con `JSON.stringify` de datos propios; correos con `escapeHtml` | `.astro`, `src/server/email/templates.ts` |
 | Inyección SQL | Solo constructor de Drizzle y plantillas `sql` parametrizadas; nunca SQL concatenado | `src/server/**` |
 | AuthN / AuthZ | §8 — verificación en servidor en cada handler admin | `src/server/auth/admin-auth.ts`, páginas `/admin/**` |
-| CSRF | `SameSite=Lax` + chequeo de `Origin` contra `PUBLIC_SITE_URL` en todo POST con efecto | `isAllowedOrigin` en `src/server/api/handlers.ts` |
+| CSRF | Admin: `SameSite=Lax` + chequeo de `Origin` contra `PUBLIC_SITE_URL` (y su variante con y sin `www.`) en login, logout y acciones del panel. Cancelación: el token del correo, no adivinable y de un solo uso, es la defensa; no se exige `Origin` (decisión 22) | `isAllowedOrigin` en `src/server/api/handlers.ts`, páginas `/admin/**` |
 | Rate limiting / abuso | Turnstile; 5 POST/IP/10 min → 429; 1 reserva futura por teléfono → 409; login 5 fallidos/IP+correo/15 min → 429 | `handlers.ts`, `create-booking.ts`, `admin-auth.ts` |
 | Verificación de webhooks | NOT APPLICABLE — no se reciben webhooks | — |
 | Auditoría de dependencias | `pnpm audit` mensual en el workspace; quien mantenga actualiza y corre `pnpm gate` | README |
@@ -2436,7 +2438,8 @@ paths:
 - Error siempre `{ error, code, fields? }` con los códigos `validation_error` 422, `turnstile_failed` 403, `slot_unavailable`/`phone_limit` 409, `rate_limited` 429 (`Retry-After`), `internal_error` 500.
 - Éxito de `POST /api/reservas`: 201 `{ code, service_date, start, end, mode, fee }`, sin envoltorio.
 - Orden en `POST /api/reservas`: rate limit → zod → Turnstile → transacción → correos post-commit (un fallo de correo nunca cambia el 201).
-- Todo POST con efecto (cancelación y admin) llama `isAllowedOrigin(request)` antes de leer el formulario.
+- Todo POST de admin (login, logout, acciones del panel) llama `isAllowedOrigin(request)` antes de leer el formulario: ahí protege una sesión con cookie.
+- El POST de `/reservas/cancelar` **no** chequea `Origin`: el token del correo es la defensa contra CSRF (no es adivinable, vive como HMAC en base, deja de servir al empezar la reserva y al usarse). Exigir `Origin` rompía la cancelación desde visores de correo, que mandan otro origen o ninguno. Registra el origen recibido con `originForLog(request)` para tener visibilidad, nunca para decidir.
 - Toda página admin empieza con `requireAdmin(...)` y redirige 303 a `/admin/login` si devuelve `null`; nunca confiar solo en middleware.
 - Respuestas con datos personales o sesión: `cache-control: no-store`; páginas admin y cancelación con `noindex`.
 - Tokens (cancelación, sesión) en base solo como hash; comparar claves con `timingSafeEqual`.
@@ -3204,6 +3207,7 @@ Todo lo de arriba afirma propiedades, no conteos. Ninguna línea acepta "cualqui
 | 19 | pnpm 12.4.2 fijado en el `build` de `[deployment]` de `.replit` (`corepack pnpm@12.4.2 install --frozen-lockfile && corepack pnpm@12.4.2 build`); `package.json` sin `packageManager` — **tomada 2026-09-16, tras fallar la publicación** | `packageManager: "pnpm@12.4.2"` en `package.json` | Replit reescribe ese campo en cada publicación y su instalación con pnpm 10, al ver pnpm 12 declarado, intenta autoinstalarlo, entra en bucle y aborta; el comando de build sí lo respeta. `replit-config.test.ts` exige `pnpm@12.4.2` y `--frozen-lockfile` en ese build | Replit deja de reescribir `package.json` o instala con pnpm 12 |
 | 20 | `pnpm-lock.yaml` regenerado desde cero con `corepack pnpm@12.4.2 install` como un solo documento YAML — **tomada 2026-09-16, tras fallar la publicación** | Conservar el lockfile de dos documentos (bloque `packageManagerDependencies` + dependencias) que pnpm 12 escribía mientras existía `packageManager` | Replit abortó con "The lockfile is broken: expected a single document in the stream, but found more". Sin `packageManager`, pnpm 12.4.2 escribe un solo documento. La regeneración subió solo dependencias transitivas (`@astrojs/compiler-rs` 0.4.0→0.4.1, `magic-string` 1.3.1→1.4.1, `browserslist` 4.28.9→4.29.0, entre otras); `pnpm install --frozen-lockfile` no lo modifica y `pnpm gate` pasa | Replit acepta lockfiles de varios documentos |
 | 21 | `--config.minimumReleaseAge=0` solo en el install del `build` de `[deployment]` de `.replit` y en el build de la Scheduled Deployment (README, §12); la política de antigüedad mínima de pnpm 12 sigue activa en el workspace y en cualquier máquina — **tomada 2026-09-16, tras fallar la publicación** | Desactivarla en `pnpm-workspace.yaml` o ampliar `minimumReleaseAgeExclude` en cada publicación | Replit abortó con `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` (19 paquetes publicados hace menos de 24 horas). En la construcción, el lockfile congelado ya fija versiones e integridades revisadas en local, donde la política sí se aplica al resolver. `replit-config.test.ts` exige el flag en ese install y que aparezca una sola vez en `.replit` | Replit instala solo versiones con más de 24 horas o la política deja de bloquear lockfiles congelados |
+| 22 | El POST de `/reservas/cancelar` no chequea `Origin`; el token del correo es la única barrera. El chequeo sigue en login admin y en todas las acciones del panel, y ahí acepta el host de `PUBLIC_SITE_URL` con y sin `www.` — **tomada 2026-09-17, tras fallar cancelaciones reales** | Exigir `Origin` también en la cancelación (con una lista de orígenes permitidos por visor de correo) | El enlace se abre desde el correo: Gmail y otros visores lo cargan en un contexto propio y mandan un `Origin` ajeno, `null` o ninguno, así que el chequeo rechazaba cancelaciones legítimas con "No pudimos confirmar la solicitud" y ninguna lista blanca cubre todos los clientes. El token cubre el riesgo que `Origin` cubriría: 256 bits aleatorios que solo viajan en el correo del cliente, guardados como HMAC-SHA-256, sin efecto una vez que la reserva empezó o que ya se canceló. Un atacante que no lo conoce no logra nada con un POST forjado, y quien lo conoce ya tiene el enlace. En admin es distinto: ahí la credencial es una cookie `SameSite=Lax` que el navegador sí adjunta, y el chequeo de `Origin` sigue siendo necesario. El POST registra `cancel.origin` (solo el origen) para ver qué mandan los clientes reales | Aparece un mecanismo de cancelación que no dependa de un token de un solo uso, o el token pasa a viajar fuera del correo |
 
 ### 20.4 Qué construir después
 

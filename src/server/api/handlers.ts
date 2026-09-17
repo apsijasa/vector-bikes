@@ -94,6 +94,25 @@ export function isAllowedOrigin(
   }
 }
 
+/**
+ * Solo el origen (esquema, host y puerto) del `Origin` recibido, nunca la ruta ni la consulta:
+ * sirve para ver qué mandan los navegadores y visores de correo reales, sin datos personales.
+ */
+export function originForLog(request: Request): string {
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    return "ausente";
+  }
+  if (origin === "null") {
+    return "null";
+  }
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return "no-valido";
+  }
+}
+
 /** La IP nunca se guarda en claro. */
 export function hashIp(ip: string | null): string | null {
   if (ip === null) {
