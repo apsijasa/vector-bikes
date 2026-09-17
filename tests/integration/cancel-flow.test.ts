@@ -148,13 +148,42 @@ describe("isAllowedOrigin", () => {
       headers: origin === undefined ? {} : { origin },
     });
 
-  it("acepta solo el origin de PUBLIC_SITE_URL", () => {
+  it("acepta el origin de PUBLIC_SITE_URL sin www", () => {
     expect(isAllowedOrigin(post("https://vectorbikes.cl"), site)).toBe(true);
     expect(isAllowedOrigin(post("https://vectorbikes.cl"))).toBe(true);
+    expect(isAllowedOrigin(post("https://vectorbikes.cl"), "https://www.vectorbikes.cl")).toBe(
+      true,
+    );
+  });
+
+  it("acepta el mismo origin con www", () => {
+    expect(isAllowedOrigin(post("https://www.vectorbikes.cl"), site)).toBe(true);
+    expect(isAllowedOrigin(post("https://www.vectorbikes.cl"))).toBe(true);
+    expect(isAllowedOrigin(post("https://www.vectorbikes.cl"), "https://www.vectorbikes.cl")).toBe(
+      true,
+    );
+  });
+
+  it("rechaza otro dominio", () => {
     expect(isAllowedOrigin(post("https://evil.example"), site)).toBe(false);
-    expect(isAllowedOrigin(post("http://vectorbikes.cl"), site)).toBe(false);
+    expect(isAllowedOrigin(post("https://www.evil.example"), site)).toBe(false);
     expect(isAllowedOrigin(post("https://vectorbikes.cl.evil.example"), site)).toBe(false);
-    expect(isAllowedOrigin(post("null"), site)).toBe(false);
+    expect(isAllowedOrigin(post("https://wwwvectorbikes.cl"), site)).toBe(false);
+    expect(isAllowedOrigin(post("https://www.www.vectorbikes.cl"), site)).toBe(false);
+  });
+
+  it("rechaza sin cabecera Origin", () => {
     expect(isAllowedOrigin(post(), site)).toBe(false);
+    expect(isAllowedOrigin(post(""), site)).toBe(false);
+    expect(isAllowedOrigin(post("null"), site)).toBe(false);
+  });
+
+  it("mantiene esquema y puerto", () => {
+    expect(isAllowedOrigin(post("http://vectorbikes.cl"), site)).toBe(false);
+    expect(isAllowedOrigin(post("http://www.vectorbikes.cl"), site)).toBe(false);
+    expect(isAllowedOrigin(post("https://vectorbikes.cl:8443"), site)).toBe(false);
+    expect(isAllowedOrigin(post("http://localhost:4321"), "http://localhost:4321")).toBe(true);
+    expect(isAllowedOrigin(post("http://www.localhost:4321"), "http://localhost:4321")).toBe(true);
+    expect(isAllowedOrigin(post("http://localhost:3000"), "http://localhost:4321")).toBe(false);
   });
 });

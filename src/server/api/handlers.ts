@@ -63,8 +63,20 @@ export function errorResponse(
   return jsonResponse(status, fields ? { error, code, fields } : { error, code }, headers);
 }
 
+/** Origins aceptados: el de `PUBLIC_SITE_URL` y su variante con y sin `www.`, mismo esquema y puerto. */
+function allowedOrigins(siteUrl: string): string[] {
+  const site = new URL(siteUrl);
+  const bare = site.hostname.replace(/^www\./, "");
+  return [bare, `www.${bare}`].map((hostname) => {
+    const variant = new URL(site.origin);
+    variant.hostname = hostname;
+    return variant.origin;
+  });
+}
+
 /**
- * Todo POST con efecto exige `Origin` igual al origin de `PUBLIC_SITE_URL`.
+ * Todo POST con efecto exige `Origin` igual al origin de `PUBLIC_SITE_URL`,
+ * o al mismo origin con o sin `www.` (el esquema y el puerto deben coincidir).
  * `security.checkOrigin` de Astro está desactivado por el proxy de Replit; esta es la defensa CSRF.
  */
 export function isAllowedOrigin(
@@ -76,7 +88,7 @@ export function isAllowedOrigin(
     return false;
   }
   try {
-    return new URL(origin).origin === new URL(siteUrl).origin;
+    return allowedOrigins(siteUrl).includes(new URL(origin).origin);
   } catch {
     return false;
   }
