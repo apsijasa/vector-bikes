@@ -1,4 +1,5 @@
 ---
+import MonthCalendar from "../../components/admin/MonthCalendar.astro";
 import Base from "../../layouts/Base.astro";
 import {
   agendaForDate,
@@ -7,6 +8,7 @@ import {
   STATUS_LABELS,
   timeRange,
 } from "../../server/admin/agenda.ts";
+import { monthOverview, parseMonth } from "../../server/admin/month.ts";
 import { requireAdmin, SESSION_COOKIE } from "../../server/auth/admin-auth.ts";
 import { addDays, localToday } from "../../server/booking/slots.ts";
 import { getDb } from "../../server/db/client.ts";
@@ -22,7 +24,11 @@ Astro.response.headers.set("cache-control", "no-store");
 
 const now = new Date();
 const date = parseDate(Astro.url.searchParams.get("fecha")) ?? localToday(now);
-const agenda = await agendaForDate(getDb(), date);
+const month = parseMonth(Astro.url.searchParams.get("mes")) ?? date.slice(0, 7);
+const [agenda, overview] = await Promise.all([
+  agendaForDate(getDb(), date),
+  monthOverview(getDb(), month, now),
+]);
 const warning = holidayWarning(now);
 ---
 
@@ -41,6 +47,7 @@ const warning = holidayWarning(now);
         <h1>Agenda</h1>
       </div>
       {warning && <p role="status" style="margin-bottom:20px;font-weight:600">{warning}</p>}
+      <MonthCalendar month={overview} selected={date} />
       <form method="get" action="/admin" style="display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:20px">
         <div class="field">
           <label for="fecha">Fecha</label>

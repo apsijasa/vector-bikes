@@ -130,6 +130,23 @@ function stateFor(input: DayInput, grid: string[], index: number, start: string)
   return "free";
 }
 
+export type DayClosure = { status: "closed" | "holiday" | "blocked"; holidayName: string | null };
+
+/** Por qué el día no recibe bicis según calendario (sin horario, feriado o bloqueo de día completo), o `null`. */
+export function calendarClosure(date: string, blocked: DayInput["blocked"]): DayClosure | null {
+  if (gridForDate(date).length === 0) {
+    return { status: "closed", holidayName: null };
+  }
+  const holidayName = HOLIDAYS.get(date);
+  if (holidayName !== undefined) {
+    return { status: "holiday", holidayName };
+  }
+  if (blocked.some((period) => period.startTime === null && period.endTime === null)) {
+    return { status: "blocked", holidayName: null };
+  }
+  return null;
+}
+
 /** Disponibilidad consultiva de un día. `createBooking` revalida todo dentro de la transacción. */
 export function computeDay(input: DayInput): DayAvailability {
   const closed = (status: DayStatus, holidayName: string | null = null): DayAvailability => ({
@@ -140,17 +157,14 @@ export function computeDay(input: DayInput): DayAvailability {
     blocks: [],
   });
 
-  const grid = gridForDate(input.date);
-  if (grid.length === 0 || input.date > addDays(localToday(input.now), HORIZON_DAYS)) {
+  if (input.date > addDays(localToday(input.now), HORIZON_DAYS)) {
     return closed("closed");
   }
-  const holidayName = HOLIDAYS.get(input.date);
-  if (holidayName !== undefined) {
-    return closed("holiday", holidayName);
+  const closure = calendarClosure(input.date, input.blocked);
+  if (closure !== null) {
+    return closed(closure.status, closure.holidayName);
   }
-  if (input.blocked.some((period) => period.startTime === null && period.endTime === null)) {
-    return closed("blocked");
-  }
+  const grid = gridForDate(input.date);
   if (input.usedCount >= DAILY_CAPACITY) {
     return closed("full");
   }

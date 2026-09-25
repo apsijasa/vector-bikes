@@ -1,20 +1,15 @@
 import { createHmac } from "node:crypto";
-import { and, between, eq, gt, ne, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { DateTime } from "luxon";
 import { z } from "zod";
 import { getHashEnv, getSiteEnv, getTurnstileEnv } from "../../lib/env.ts";
 import { errorMessage, log } from "../../lib/log.ts";
+import { readRange } from "../booking/availability.ts";
 import { createBooking } from "../booking/create-booking.ts";
 import { DAILY_CAPACITY, TIMEZONE } from "../booking/rules.ts";
 import { addDays, computeDay, localToday } from "../booking/slots.ts";
 import type { AppDb } from "../db/client.ts";
-import {
-  type Booking,
-  blockedPeriods,
-  bookingBlocks,
-  bookingRequests,
-  bookings,
-} from "../db/schema.ts";
+import { type Booking, bookingRequests } from "../db/schema.ts";
 import { verifyTurnstile } from "./turnstile.ts";
 
 export type HandlerContext = {
@@ -207,29 +202,6 @@ const bookingSchema = z
     }
   });
 
-/** Bloques activos, bloqueos y conteo por fecha para todo el rango, en tres consultas. */
-async function readRange(db: AppDb, from: string, to: string) {
-  const blocks = await db
-    .select({ serviceDate: bookingBlocks.serviceDate, blockStart: bookingBlocks.blockStart })
-    .from(bookingBlocks)
-    .where(and(eq(bookingBlocks.isActive, true), between(bookingBlocks.serviceDate, from, to)));
-  const blocked = await db
-    .select({
-      serviceDate: blockedPeriods.serviceDate,
-      startTime: blockedPeriods.startTime,
-      endTime: blockedPeriods.endTime,
-    })
-    .from(blockedPeriods)
-    .where(between(blockedPeriods.serviceDate, from, to));
-  const used = await db
-    .select({ serviceDate: bookings.serviceDate, n: sql<number>`count(*)` })
-    .from(bookings)
-    .where(and(between(bookings.serviceDate, from, to), ne(bookings.status, "cancelled")))
-    .groupBy(bookings.serviceDate);
-
-  return { blocks, blocked, used };
-}
-
 export async function handleAvailability(url: URL, ctx: HandlerContext): Promise<Response> {
   const parsed = availabilitySchema.safeParse({
     desde: url.searchParams.get("desde") ?? undefined,
@@ -248,24 +220,10 @@ export async function handleAvailability(url: URL, ctx: HandlerContext): Promise
 
   const dates = Array.from({ length: dias }, (_, index) => addDays(desde, index));
   const last = dates.at(-1) ?? desde;
-  const { blocks, blocked, used } = await readRange(ctx.db, desde, last);
+  const dayData = await readRange(ctx.db, desde, last);
 
   const days = dates.map((date) =>
-    computeDay({
-      date,
-      mode: modo,
-      now: ctx.now,
-      activeBlockStarts: blocks
-        .filter((row) => row.serviceDate === date)
-        .map((row) => row.blockStart.slice(0, 5)),
-      blocked: blocked
-        .filter((row) => row.serviceDate === date)
-        .map((row) => ({
-          startTime: row.startTime === null ? null : row.startTime.slice(0, 5),
-          endTime: row.endTime === null ? null : row.endTime.slice(0, 5),
-        })),
-      usedCount: Number(used.find((row) => row.serviceDate === date)?.n ?? 0),
-    }),
+    computeDay({ date, mode: modo, now: ctx.now, ...dayData(date) }),
   );
 
   return jsonResponse(200, { timezone: TIMEZONE, modo, capacity: DAILY_CAPACITY, days });
