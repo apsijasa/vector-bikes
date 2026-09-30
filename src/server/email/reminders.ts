@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { errorMessage, log } from "../../lib/log.ts";
 import { addDays, localToday } from "../booking/slots.ts";
 import type { AppDb } from "../db/client.ts";
@@ -23,7 +23,7 @@ export async function sendReminders(
     .from(bookings)
     .where(
       and(
-        eq(bookings.status, "confirmed"),
+        inArray(bookings.status, ["confirmed", "ready_for_pickup"]),
         eq(bookings.serviceDate, tomorrow),
         isNull(bookings.reminderSentAt),
       ),

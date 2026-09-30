@@ -51,6 +51,45 @@ const adminSetupSchema = z.object({
   ADMIN_PASSWORD: z.string().min(12),
 });
 
+const whatsappSchema = z
+  .object({
+    WHATSAPP_ENABLED: z.enum(["true", "false"]).default("false"),
+    WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+    WHATSAPP_PHONE_NUMBER_ID: z.string().regex(/^\d+$/).optional(),
+    WHATSAPP_GRAPH_VERSION: z
+      .string()
+      .regex(/^v\d+\.\d+$/)
+      .default("v23.0"),
+    WHATSAPP_REMINDER_TEMPLATE: z
+      .string()
+      .regex(/^[a-z0-9_]+$/)
+      .optional(),
+    WHATSAPP_READY_TEMPLATE: z
+      .string()
+      .regex(/^[a-z0-9_]+$/)
+      .optional(),
+    WHATSAPP_TEMPLATE_LANGUAGE: z
+      .string()
+      .regex(/^[a-z]{2}(?:_[A-Z]{2})?$/)
+      .default("es_CL"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.WHATSAPP_ENABLED !== "true") return;
+    for (const key of [
+      "WHATSAPP_ACCESS_TOKEN",
+      "WHATSAPP_PHONE_NUMBER_ID",
+      "WHATSAPP_REMINDER_TEMPLATE",
+      "WHATSAPP_READY_TEMPLATE",
+    ] as const) {
+      if (!value[key])
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: "requerida cuando WhatsApp está habilitado",
+        });
+    }
+  });
+
 export type EmailEnv = z.infer<typeof emailSchema>;
 
 /** Paso 2 en adelante. */
@@ -86,4 +125,11 @@ export function getEmailEnv(source: EnvSource = process.env): EmailEnv {
 /** Solo scripts/admin-set-password.ts (paso 10). */
 export function getAdminSetupEnv(source: EnvSource = process.env) {
   return parseSource(adminSetupSchema, source);
+}
+
+export function getWhatsAppEnv(source: EnvSource = process.env) {
+  if (source.WHATSAPP_ENABLED !== "true") {
+    return parseSource(whatsappSchema, { WHATSAPP_ENABLED: source.WHATSAPP_ENABLED });
+  }
+  return parseSource(whatsappSchema, source);
 }

@@ -61,7 +61,10 @@ function stateOf(booking: Booking, now: Date): "cancelled" | "started" | "confir
   if (booking.status === "cancelled") {
     return "cancelled";
   }
-  if (booking.status !== "confirmed" || booking.startsAt.getTime() <= now.getTime()) {
+  if (
+    (booking.status !== "confirmed" && booking.status !== "ready_for_pickup") ||
+    booking.startsAt.getTime() <= now.getTime()
+  ) {
     return "started";
   }
   return "confirm";

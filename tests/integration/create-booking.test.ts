@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { cancelBooking } from "../../src/server/booking/cancel-booking.ts";
 import { type CreateBookingInput, createBooking } from "../../src/server/booking/create-booking.ts";
 import type { AppDb } from "../../src/server/db/client.ts";
-import { bookingBlocks } from "../../src/server/db/schema.ts";
+import { bookingBlocks, bookings } from "../../src/server/db/schema.ts";
 import { type TestDb, createTestDb } from "../helpers/pglite.ts";
 
 /** 2026-09-15 12:00 hora local. */
@@ -54,7 +54,17 @@ describe("createBooking", () => {
     expect(result.booking.code).toBe("VB-260916-1630");
     expect(result.booking.startsAt.toISOString()).toBe("2026-09-16T19:30:00.000Z");
     expect(result.booking.pickupFeeClp).toBe(0);
+    expect(result.booking.whatsappConsentAt).toBeNull();
     expect(await activeStarts(db, "2026-09-16")).toEqual(["16:30:00"]);
+  });
+
+  it("registra el instante solo si la persona autorizó contacto operativo por WhatsApp", async () => {
+    const result = await createBooking(db, input({ whatsappConsent: true }), NOW);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.code);
+    }
+    expect(result.booking.whatsappConsentAt?.toISOString()).toBe(NOW.toISOString());
   });
 
   it("crea una reserva de retiro con dos bloques y la tarifa", async () => {
@@ -125,6 +135,21 @@ describe("createBooking", () => {
       throw new Error("esperaba phone_limit");
     }
     expect(second.code).toBe("phone_limit");
+  });
+
+  it("cuenta una reserva lista para retiro como futura activa para el límite telefónico", async () => {
+    const ready = await createBooking(db, input(), NOW);
+    if (!ready.ok) {
+      throw new Error(ready.code);
+    }
+    await db
+      .update(bookings)
+      .set({ status: "ready_for_pickup" })
+      .where(eq(bookings.id, ready.booking.id));
+
+    const second = await createBooking(db, input({ serviceDate: "2026-09-17" }), NOW);
+
+    expect(second).toEqual({ ok: false, code: "phone_limit" });
   });
 
   it("rechaza un feriado", async () => {

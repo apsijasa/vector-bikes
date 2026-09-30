@@ -176,6 +176,7 @@ const bookingSchema = z
     comuna: z.enum(["Vitacura", "Las Condes"], "Elige Vitacura o Las Condes.").nullish(),
     direccion: z.string().trim().min(5).max(200).nullish(),
     consentimiento: z.literal(true, "Acepta el aviso de privacidad para confirmar."),
+    whatsapp_consentimiento: z.boolean().default(false),
     turnstile_token: z.string().optional(),
   })
   .superRefine((value, ctx) => {
@@ -322,6 +323,7 @@ export async function handleCreateBooking(
         comuna: data.comuna ?? null,
         address: data.direccion ?? null,
         ipHash: hashIp(ctx.ip),
+        whatsappConsent: data.whatsapp_consentimiento,
       },
       ctx.now,
     );

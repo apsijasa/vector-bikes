@@ -93,6 +93,7 @@ export default function BookingIsland({ siteKey }: { siteKey: string }) {
       descripcion: state.form.descripcion.trim(),
       ...(isPickup ? { comuna: state.form.comuna, direccion: state.form.direccion.trim() } : {}),
       consentimiento: state.form.consentimiento,
+      whatsapp_consentimiento: state.form.whatsappConsent,
       turnstile_token: turnstileToken,
     });
   }

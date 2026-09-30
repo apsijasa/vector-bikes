@@ -1,0 +1,1 @@
+- [Recuperación de envíos externos](external-send-recovery.md) — una respuesta perdida no prueba que Meta rechazó el envío; verificar resultado y fin del proceso antes de reintentar.

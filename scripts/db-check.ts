@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { getTableColumns, getTableName } from "drizzle-orm";
 import postgres from "postgres";
 import { getDbEnv } from "../src/lib/env.ts";
+import { allTables } from "../src/server/db/schema.ts";
 
 const CREATE_TABLE = /CREATE TABLE(?: IF NOT EXISTS)? "(?:public"\.")?([a-z_]+)"/g;
 
@@ -29,11 +31,33 @@ try {
   const rows = await sql<{ table_name: string }[]>`
     select table_name from information_schema.tables where table_schema = 'public'
   `;
+  const columns = await sql<{ table_name: string; column_name: string }[]>`
+    select table_name, column_name from information_schema.columns where table_schema = 'public'
+  `;
+  const constraints = await sql<{ definition: string }[]>`
+    select pg_get_constraintdef(oid) as definition from pg_constraint
+    where conname = 'bookings_status_check'
+  `;
   await sql.end();
   const present = new Set(rows.map((row) => row.table_name));
   const missing = expected.filter((name) => !present.has(name));
   if (missing.length > 0) {
     console.error(JSON.stringify({ ok: false, missing }));
+    process.exit(1);
+  }
+  const presentColumns = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
+  const missingColumns = allTables
+    .flatMap((table) =>
+      Object.values(getTableColumns(table)).map(
+        (column) => `${getTableName(table)}.${column.name}`,
+      ),
+    )
+    .filter((name) => !presentColumns.has(name));
+  if (
+    missingColumns.length > 0 ||
+    !constraints.some((row) => row.definition.includes("ready_for_pickup"))
+  ) {
+    console.error(JSON.stringify({ ok: false, missingColumns, readyStatusConstraint: false }));
     process.exit(1);
   }
   console.log(JSON.stringify({ ok: true, tables: expected }));

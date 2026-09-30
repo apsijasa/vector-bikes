@@ -8,6 +8,20 @@
       "when": 1789523656897,
       "tag": "0000_public_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790801548829,
+      "tag": "0001_huge_ultron",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790802410328,
+      "tag": "0002_familiar_true_believers",
+      "breakpoints": true
     }
   ]
 }

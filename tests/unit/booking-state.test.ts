@@ -81,6 +81,27 @@ describe("bookingReducer", () => {
     expect(errors.consentimiento).toBe("Acepta el aviso de privacidad para confirmar.");
   });
 
+  it("mantiene WhatsApp desmarcado por defecto y no lo exige para reservar", () => {
+    const state: State = {
+      ...initialState,
+      availability: { status: "ready", days: [day("2026-09-16")], capacity: 4 },
+      selectedDate: "2026-09-16",
+      selectedStart: "16:00",
+      form: {
+        ...initialState.form,
+        nombre: "Javiera Rojas",
+        telefono: "1234 5678",
+        correo: "javiera@ejemplo.cl",
+        bicicleta: "Ruta Specialized",
+        descripcion: "Ajustar cambios y frenos",
+        consentimiento: true,
+      },
+    };
+    expect(state.form.whatsappConsent).toBe(false);
+    expect(validateForm(state)).not.toHaveProperty("whatsappConsent");
+    expect(validateForm(state)).not.toHaveProperty("consentimiento");
+  });
+
   it("libera el bloque y muestra el mensaje del servidor tras un 409", () => {
     const state: State = {
       ...ready([day("2026-09-16")]),

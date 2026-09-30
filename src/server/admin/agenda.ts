@@ -7,8 +7,19 @@ import { HORIZON_DAYS, TIMEZONE } from "../booking/rules.ts";
 import { localToday } from "../booking/slots.ts";
 import type { AppDb } from "../db/client.ts";
 import { type BlockedPeriod, type Booking, blockedPeriods, bookings } from "../db/schema.ts";
+import {
+  listNotices,
+  sendReadyNotification,
+  sendReminderNotification,
+} from "../whatsapp/service.ts";
 
-export type AdminAction = "cancelar" | "completar" | "no_show";
+export type AdminAction =
+  | "cancelar"
+  | "completar"
+  | "no_show"
+  | "lista_para_retirar"
+  | "reintentar_whatsapp"
+  | "reintentar_recordatorio_whatsapp";
 
 export type AdminActionResult =
   | { ok: true; booking: Booking }
@@ -16,6 +27,7 @@ export type AdminActionResult =
 
 export const STATUS_LABELS: Record<string, string> = {
   confirmed: "Confirmada",
+  ready_for_pickup: "Lista para retirar",
   cancelled: "Cancelada",
   completed: "Completada",
   no_show: "No-show",
@@ -55,7 +67,7 @@ export async function bookingDetail(db: AppDb, id: string): Promise<Booking | nu
   return booking ?? null;
 }
 
-/** `completar` y `no_show` solo desde `confirmed`; sus bloques siguen activos (el cupo se usó). */
+/** `completar` desde `confirmed` o `ready_for_pickup`; `no_show` solo desde `confirmed`. */
 async function closeBooking(
   db: AppDb,
   id: string,
@@ -67,7 +79,11 @@ async function closeBooking(
     if (!booking) {
       return { ok: false, code: "not_found" };
     }
-    if (booking.status !== "confirmed") {
+    if (
+      status === "no_show"
+        ? booking.status !== "confirmed"
+        : booking.status !== "confirmed" && booking.status !== "ready_for_pickup"
+    ) {
       return { ok: false, code: "invalid_transition" };
     }
     const [updated] = await tx
@@ -80,6 +96,82 @@ async function closeBooking(
     }
     return { ok: true, booking: updated };
   });
+}
+
+/** El cambio de estado se confirma antes de intentar enviar la notificación. */
+async function markReadyForPickup(db: AppDb, id: string, now: Date): Promise<AdminActionResult> {
+  const result = await db.transaction(async (tx) => {
+    const [booking] = await tx.select().from(bookings).where(eq(bookings.id, id)).for("update");
+    if (!booking) {
+      return { ok: false, code: "not_found" } as const;
+    }
+    if (booking.status !== "confirmed") {
+      return { ok: false, code: "invalid_transition" } as const;
+    }
+    const [updated] = await tx
+      .update(bookings)
+      .set({ status: "ready_for_pickup" })
+      .where(eq(bookings.id, id))
+      .returning();
+    if (!updated) {
+      throw new Error("la actualización no devolvió la reserva");
+    }
+    return { ok: true, booking: updated } as const;
+  });
+
+  if (result.ok) {
+    await sendReadyNotification(db, id, now);
+  }
+  return result;
+}
+
+async function retryReadyNotification(
+  db: AppDb,
+  id: string,
+  now: Date,
+): Promise<AdminActionResult> {
+  const booking = await bookingDetail(db, id);
+  if (!booking) {
+    return { ok: false, code: "not_found" };
+  }
+  if (booking.status !== "ready_for_pickup") {
+    return { ok: false, code: "invalid_transition" };
+  }
+  if (!booking.whatsappConsentAt) {
+    return { ok: false, code: "invalid_transition" };
+  }
+  const notices = await listNotices(db, id);
+  const readyNotice = notices.find((notice) => notice.type === "ready");
+  if (readyNotice && readyNotice.status !== "failed") {
+    return { ok: false, code: "invalid_transition" };
+  }
+  await sendReadyNotification(db, id, now);
+  return { ok: true, booking };
+}
+
+async function retryReminderNotification(
+  db: AppDb,
+  id: string,
+  now: Date,
+): Promise<AdminActionResult> {
+  const booking = await bookingDetail(db, id);
+  if (!booking) {
+    return { ok: false, code: "not_found" };
+  }
+  if (
+    booking.status !== "confirmed" ||
+    !booking.whatsappConsentAt ||
+    booking.startsAt.getTime() <= now.getTime()
+  ) {
+    return { ok: false, code: "invalid_transition" };
+  }
+  const notices = await listNotices(db, id);
+  const reminderNotice = notices.find((notice) => notice.type === "reminder");
+  if (reminderNotice?.status !== "failed") {
+    return { ok: false, code: "invalid_transition" };
+  }
+  await sendReminderNotification(db, id, now);
+  return { ok: true, booking };
 }
 
 /** El admin cancela sin correo: el dueño llama al cliente. */
@@ -98,6 +190,15 @@ export async function applyAdminAction(
   if (action === "no_show") {
     return closeBooking(db, id, "no_show", now);
   }
+  if (action === "lista_para_retirar") {
+    return markReadyForPickup(db, id, now);
+  }
+  if (action === "reintentar_whatsapp") {
+    return retryReadyNotification(db, id, now);
+  }
+  if (action === "reintentar_recordatorio_whatsapp") {
+    return retryReminderNotification(db, id, now);
+  }
   const result = await cancelBooking(db, { bookingId: id, by: "admin", now });
   if (result.ok) {
     return result;
@@ -105,7 +206,14 @@ export async function applyAdminAction(
   return { ok: false, code: result.code === "not_found" ? "not_found" : "invalid_transition" };
 }
 
-export const adminActionSchema = z.enum(["cancelar", "completar", "no_show"]);
+export const adminActionSchema = z.enum([
+  "cancelar",
+  "completar",
+  "no_show",
+  "lista_para_retirar",
+  "reintentar_whatsapp",
+  "reintentar_recordatorio_whatsapp",
+]);
 
 export async function listUpcomingBlocks(db: AppDb, fromDate: string): Promise<BlockedPeriod[]> {
   return db

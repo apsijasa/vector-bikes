@@ -10,6 +10,7 @@ export const FIELD_IDS: Record<keyof FormValues, string> = {
   comuna: "f-comuna",
   direccion: "f-dir",
   consentimiento: "f-ok",
+  whatsappConsent: "f-whatsapp",
 };
 
 type FieldsProps = {
@@ -21,7 +22,10 @@ type FieldsProps = {
 };
 
 /** Atributos comunes de cada control: id, nombre, valor y accesibilidad del error. */
-function bind(props: FieldsProps, field: Exclude<keyof FormValues, "consentimiento">) {
+function bind(
+  props: FieldsProps,
+  field: Exclude<keyof FormValues, "consentimiento" | "whatsappConsent">,
+) {
   const id = FIELD_IDS[field];
   const error = props.errors[field];
   return {
@@ -187,6 +191,21 @@ export function BookingFields(props: FieldsProps) {
             {errors.consentimiento}
           </span>
         )}
+        <label class="consent full" for="f-whatsapp">
+          <input
+            type="checkbox"
+            id="f-whatsapp"
+            name="whatsapp_consentimiento"
+            checked={form.whatsappConsent}
+            onChange={(event) =>
+              onField("whatsappConsent", (event.currentTarget as HTMLInputElement).checked)
+            }
+          />
+          <span>
+            Autorizo que Vector Bikes me contacte por WhatsApp al número indicado para coordinar
+            aspectos operativos de esta reserva. Es opcional y no recibiré publicidad.
+          </span>
+        </label>
         <div class="field full" ref={turnstileRef}></div>
       </div>
     </fieldset>

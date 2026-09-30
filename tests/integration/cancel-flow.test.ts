@@ -87,6 +87,20 @@ describe("cancelación con token", () => {
     expect(consoleOutbox[0]?.subject).toContain("Reserva cancelada");
   });
 
+  it("permite ver y cancelar una reserva futura lista para retiro", async () => {
+    const { booking, cancelToken } = await newBooking(test.db);
+    await test.db
+      .update(bookings)
+      .set({ status: "ready_for_pickup" })
+      .where(eq(bookings.id, booking.id));
+
+    expect((await viewCancellation(test.db, cancelToken, NOW)).view).toBe("confirm");
+    expect((await performCancellation(test.db, cancelToken, NOW)).view).toBe("done");
+
+    const [row] = await test.db.select().from(bookings).where(eq(bookings.id, booking.id));
+    expect(row?.status).toBe("cancelled");
+  });
+
   it("un segundo envío del mismo token no escribe ni envía nada", async () => {
     const { cancelToken } = await newBooking(test.db);
     await performCancellation(test.db, cancelToken, NOW);

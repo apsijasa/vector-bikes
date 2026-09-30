@@ -17,6 +17,7 @@ export type FormValues = {
   comuna: string;
   direccion: string;
   consentimiento: boolean;
+  whatsappConsent: boolean;
 };
 
 export type BookingResult = {
@@ -118,6 +119,7 @@ const EMPTY_FORM: FormValues = {
   comuna: "",
   direccion: "",
   consentimiento: false,
+  whatsappConsent: false,
 };
 
 export const initialState: State = {

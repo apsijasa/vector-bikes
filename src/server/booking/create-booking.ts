@@ -1,4 +1,4 @@
-import { and, eq, gt, like, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, like, ne, or, sql } from "drizzle-orm";
 import { type AppDb, isUniqueViolation } from "../db/client.ts";
 import {
   type Booking,
@@ -24,6 +24,7 @@ export type CreateBookingInput = {
   comuna: string | null;
   address: string | null;
   ipHash: string | null;
+  whatsappConsent?: boolean;
 };
 
 export type CreateBookingResult =
@@ -93,6 +94,7 @@ async function insertBooking(
       address: input.address,
       pickupFeeClp: input.mode === "retiro" ? PICKUP_FEE_CLP : 0,
       consentAt: now,
+      whatsappConsentAt: input.whatsappConsent === true ? now : null,
       cancelTokenHash: hashCancelToken(cancelToken),
       ipHash: input.ipHash,
     })
@@ -141,7 +143,7 @@ export async function createBooking(
         .where(
           and(
             eq(bookings.phoneE164, input.phoneE164),
-            eq(bookings.status, "confirmed"),
+            inArray(bookings.status, ["confirmed", "ready_for_pickup"]),
             gt(bookings.startsAt, now),
           ),
         )

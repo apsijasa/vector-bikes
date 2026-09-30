@@ -13,18 +13,24 @@ import { handleAvailability } from "../../src/server/api/handlers.ts";
 import { cancelBooking } from "../../src/server/booking/cancel-booking.ts";
 import { createBooking } from "../../src/server/booking/create-booking.ts";
 import type { AppDb } from "../../src/server/db/client.ts";
-import { bookingBlocks, bookings } from "../../src/server/db/schema.ts";
+import { bookingBlocks, bookings, whatsappMessages } from "../../src/server/db/schema.ts";
 import { type TestDb, createTestDb } from "../helpers/pglite.ts";
 
 /** 2026-09-15 12:00 hora local. */
 const NOW = new Date("2026-09-15T15:00:00.000Z");
 const DATE = "2026-09-17";
 
-async function newBooking(db: AppDb, start: string, phone: string) {
+async function newBooking(
+  db: AppDb,
+  start: string,
+  phone: string,
+  mode: "taller" | "retiro" = "taller",
+  whatsappConsent = mode === "retiro",
+) {
   const result = await createBooking(
     db,
     {
-      mode: "taller",
+      mode,
       serviceDate: DATE,
       start,
       customerName: "Camila Soto",
@@ -32,9 +38,10 @@ async function newBooking(db: AppDb, start: string, phone: string) {
       email: "camila@ejemplo.cl",
       bike: "Gravel Canyon",
       description: "Mantención general",
-      comuna: null,
-      address: null,
+      comuna: mode === "retiro" ? "Vitacura" : null,
+      address: mode === "retiro" ? "Av. Bicentenario 123" : null,
       ipHash: null,
+      whatsappConsent,
     },
     NOW,
   );
@@ -49,6 +56,20 @@ async function dayStatus(db: AppDb, date: string): Promise<string> {
   const response = await handleAvailability(url, { db, now: NOW, ip: null });
   const body = (await response.json()) as { days: { status: string }[] };
   return body.days[0]?.status ?? "sin-dato";
+}
+
+async function withWhatsAppDisabled<T>(run: () => Promise<T>): Promise<T> {
+  const previousEnabled = process.env.WHATSAPP_ENABLED;
+  process.env.WHATSAPP_ENABLED = "false";
+  try {
+    return await run();
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.WHATSAPP_ENABLED;
+    } else {
+      process.env.WHATSAPP_ENABLED = previousEnabled;
+    }
+  }
 }
 
 describe("panel admin", () => {
@@ -104,6 +125,102 @@ describe("panel admin", () => {
     expect(refused).toEqual({ ok: false, code: "invalid_transition" });
     const [after] = await test.db.select().from(bookings).where(eq(bookings.id, cancelled.id));
     expect(after).toEqual(before);
+  });
+
+  it("marca reservas de ambas modalidades listas y permite completarlas desde ese estado", async () => {
+    const pickup = await newBooking(test.db, "15:00", "+56911111111", "retiro");
+    const workshop = await newBooking(test.db, "16:00", "+56922222222", "taller");
+
+    await withWhatsAppDisabled(async () => {
+      const ready = await applyAdminAction(test.db, pickup.id, "lista_para_retirar", NOW);
+      const workshopReady = await applyAdminAction(test.db, workshop.id, "lista_para_retirar", NOW);
+      const noShowFromReady = await applyAdminAction(test.db, workshop.id, "no_show", NOW);
+      const completed = await applyAdminAction(test.db, pickup.id, "completar", NOW);
+
+      expect(ready.ok && ready.booking.status).toBe("ready_for_pickup");
+      expect(workshopReady.ok && workshopReady.booking.status).toBe("ready_for_pickup");
+      expect(noShowFromReady).toEqual({ ok: false, code: "invalid_transition" });
+      expect(completed.ok && completed.booking.status).toBe("completed");
+      expect(await applyAdminAction(test.db, pickup.id, "lista_para_retirar", NOW)).toEqual({
+        ok: false,
+        code: "invalid_transition",
+      });
+    });
+  });
+
+  it("no permite reintentar aviso listo sin consentimiento ni con envío en curso o incierto", async () => {
+    const withoutConsent = await newBooking(test.db, "15:00", "+56911111111", "taller");
+    const withConsent = await newBooking(test.db, "16:00", "+56922222222", "taller", true);
+    await withWhatsAppDisabled(async () => {
+      await applyAdminAction(test.db, withoutConsent.id, "lista_para_retirar", NOW);
+      expect(
+        await applyAdminAction(test.db, withoutConsent.id, "reintentar_whatsapp", NOW),
+      ).toEqual({ ok: false, code: "invalid_transition" });
+      await applyAdminAction(test.db, withConsent.id, "lista_para_retirar", NOW);
+      for (const status of ["pending", "sent", "sending", "unknown"] as const) {
+        await test.db
+          .insert(whatsappMessages)
+          .values({
+            bookingId: withConsent.id,
+            type: "ready",
+            status,
+            attempts: 1,
+          })
+          .onConflictDoUpdate({
+            target: [whatsappMessages.bookingId, whatsappMessages.type],
+            set: { status },
+          });
+        expect(await applyAdminAction(test.db, withConsent.id, "reintentar_whatsapp", NOW)).toEqual(
+          { ok: false, code: "invalid_transition" },
+        );
+      }
+    });
+  });
+
+  it("un recordatorio enviado no bloquea el reintento de aviso de bicicleta lista", async () => {
+    const booking = await newBooking(test.db, "15:00", "+56911111111", "retiro");
+    await withWhatsAppDisabled(async () => {
+      await applyAdminAction(test.db, booking.id, "lista_para_retirar", NOW);
+      await test.db.insert(whatsappMessages).values({
+        bookingId: booking.id,
+        type: "reminder",
+        status: "sent",
+        attempts: 1,
+        metaMessageId: "wamid.reminder",
+        sentAt: NOW,
+      });
+
+      const retried = await applyAdminAction(test.db, booking.id, "reintentar_whatsapp", NOW);
+
+      expect(retried.ok).toBe(true);
+    });
+  });
+
+  it("permite reintentar solo un recordatorio fallido de reserva consentida y futura", async () => {
+    const booking = await newBooking(test.db, "15:00", "+56911111111", "taller", true);
+    await test.db.insert(whatsappMessages).values({
+      bookingId: booking.id,
+      type: "reminder",
+      status: "failed",
+      attempts: 1,
+    });
+    await withWhatsAppDisabled(async () => {
+      const retried = await applyAdminAction(
+        test.db,
+        booking.id,
+        "reintentar_recordatorio_whatsapp",
+        NOW,
+      );
+      expect(retried.ok).toBe(true);
+
+      await test.db
+        .update(whatsappMessages)
+        .set({ status: "unknown" })
+        .where(eq(whatsappMessages.bookingId, booking.id));
+      expect(
+        await applyAdminAction(test.db, booking.id, "reintentar_recordatorio_whatsapp", NOW),
+      ).toEqual({ ok: false, code: "invalid_transition" });
+    });
   });
 
   it("marca no-show desde confirmed", async () => {

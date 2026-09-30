@@ -13,7 +13,7 @@ Sitio y reservas en línea del taller de bicicletas Vector Bikes (Av. Kennedy 76
 | Casilla del taller | `info@vectorbikes.cl` en **Microsoft 365**. Recibe los avisos de reservas nuevas y cancelaciones. |
 | Antispam | **Cloudflare Turnstile** con claves reales, verificado en producción. |
 | Panel admin | Operativo en `https://vectorbikes.cl/admin`, con agenda del día y vista de mes. Cuenta `info@vectorbikes.cl` creada en la base de producción. |
-| Recordatorios | **No activos** (ver *Pendientes*). |
+| Recordatorios WhatsApp | **Opcionales**: requieren configuración de Meta y un cron externo (ver *Recordatorios*). |
 
 ## Operación diaria
 
@@ -70,7 +70,7 @@ Para seguir trabajando en el workspace después de publicar, reinstala con `pnpm
 
 ## Pendientes
 
-- **Recordatorios.** `pnpm reminders:send` existe y funciona, pero no se ejecuta en producción: Replit no permite una segunda publicación (Scheduled Deployment) en esta App. La alternativa elegida es exponer un endpoint protegido que llame un cron externo en **Make.com** una vez al día; **WhatsApp Business** queda como paso posterior. Mientras tanto, los clientes no reciben recordatorio.
+- **Recordatorios WhatsApp.** La integración directa opcional con Meta Cloud API se activa solo al configurarla; el endpoint protegido debe llamarlo un cron externo de **Make.com** (ver *Recordatorios*). No se ejecuta un cron interno de la app.
 - **Rotar la credencial de la base de producción.** La contraseña de la base de producción no ha sido rotada desde el lanzamiento. Tras rotarla hay que actualizar el `DATABASE_URL` en los secretos de la deployment y volver a publicar.
 - **Feriados 2027.** Ver *Configuración de producción → Feriados 2027*.
 
@@ -107,7 +107,39 @@ pnpm gate   # check + test + build + test:build + smoke
 
 ## Recordatorios
 
-`pnpm reminders:send` envía el recordatorio a las reservas confirmadas de mañana (hora de Santiago) que aún no lo recibieron. Es idempotente: una segunda ejecución el mismo día envía 0. Imprime `{"ok":true,"sent":N,"failed":0}` y sale 1 si algún envío falló. En producción no está programado (ver *Pendientes*).
+La integración directa con **WhatsApp Business Cloud API de Meta** es opcional. Los correos de reserva y notificación al taller siguen siendo independientes: un fallo o la desactivación de WhatsApp no los sustituye ni los desactiva.
+
+### Preparación de Meta
+
+1. En Meta Business, configura/verifica el negocio y completa la configuración de WhatsApp Business Platform (Cloud API).
+2. Asocia y verifica un número de teléfono de empresa. Usa el **Phone Number ID** de ese número, no el número visible, como `WHATSAPP_PHONE_NUMBER_ID`.
+3. Genera un token de acceso de sistema adecuado para producción y guárdalo como secreto `WHATSAPP_ACCESS_TOKEN`. No lo pongas en el navegador, en código, ni en el repositorio.
+4. En WhatsApp Manager, crea las plantillas de categoría correspondiente y espera la aprobación de Meta antes de enviar. Configura los nombres aprobados en `WHATSAPP_REMINDER_TEMPLATE` y `WHATSAPP_READY_TEMPLATE`, y el idioma disponible/aprobado en `WHATSAPP_TEMPLATE_LANGUAGE` (por defecto `es_CL`). Los parámetros del cuerpo deben ser posicionales y mantener este orden:
+   - Recordatorio: `{{1}}` nombre, `{{2}}` fecha `dd/MM/yyyy`, `{{3}}` hora de Santiago `HH:mm`, `{{4}}` código de reserva.
+   - Bicicleta lista: `{{1}}` nombre, `{{2}}` bicicleta, `{{3}}` código.
+   - Ejemplo de recordatorio: «Hola {{1}}, te recordamos tu reserva del {{2}} a las {{3}}. Código: {{4}}».
+   - Ejemplo de bicicleta lista: «Hola {{1}}, tu bicicleta {{2}} está lista para retirar. Reserva: {{3}}».
+5. En los secretos del entorno donde corre la app, configura `WHATSAPP_ENABLED=true`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_GRAPH_VERSION` (por defecto `v23.0`) y los nombres/idioma exactos de las plantillas aprobadas. Mantén `WHATSAPP_ENABLED=false` mientras falte cualquier requisito. No agregues ninguna de estas credenciales al cliente.
+6. El consentimiento para WhatsApp aplica únicamente a reservas nuevas en las que el cliente lo otorgue. No se debe asumir ni activar consentimiento para reservas anteriores.
+
+### Cron externo de recordatorios
+
+Un cron externo de **Make.com** debe llamar cada 15 minutos. Procesa reservas confirmadas que empiezan dentro de las próximas 24 horas y aún no recibieron WhatsApp, incluyendo reservas hechas el mismo día; usa `America/Santiago` para las fechas y horas del mensaje:
+
+```http
+POST /api/internal/whatsapp-reminders
+Authorization: Bearer <CRON_SECRET>
+```
+
+Configura `CRON_SECRET` como secreto privado de al menos 32 caracteres; el mismo valor va en el encabezado de Make.com. No lo expongas en el cliente ni en logs o URL. En Make.com usa el módulo HTTP, método POST, programación cada 15 minutos en zona `America/Santiago` y un timeout de 180 segundos. El endpoint devuelve un resumen de envíos `sent`, `failed` y `skipped`. No configures un cron interno ni una Scheduled Deployment para esta tarea.
+
+Si una llamada termina con timeout o resultado desconocido, no la reintentes a ciegas: primero verifica el resultado/estado de los envíos para evitar duplicados. Un error de respuesta no demuestra que Meta no haya aceptado el mensaje. La fila queda bloqueada en `unknown` (o `sending` si se interrumpió el proceso) y no se reenvía automáticamente. Tras dos minutos, el panel permite conciliar un envío interrumpido, pero exige confirmar que el proceso/ejecución cron terminó o fue detenido: el tiempo transcurrido por sí solo no basta. Registra la evidencia de verificación y el `wamid` si fue aceptado. Solo confirma «no aceptado» con evidencia real, nunca por un timeout; esto habilita un reintento seguro. La API de Meta no ofrece una clave de idempotencia de envío: no es posible garantizar exactamente una entrega tras una respuesta perdida sin verificar el resultado externo. `sent` significa aceptado por Meta, no necesariamente leído o entregado al dispositivo.
+
+En el detalle de cualquier reserva confirmada, **Bicicleta lista — enviar WhatsApp** cambia el estado a `ready_for_pickup` y después intenta el aviso. Un fallo no revierte el estado; el panel muestra el resultado y permite reintentar rechazos confirmados. Puede completarse una reserva lista. Los recordatorios y avisos de bicicleta lista tienen filas únicas e independientes por reserva/tipo; los campos del correo no se reutilizan.
+
+Antes de activar en producción, aplica `pnpm db:migrate` y ejecuta `pnpm db:check` en desarrollo: verifica tablas, columnas y la restricción del estado `ready_for_pickup`. Después publica los cambios de aplicación/esquema y confirma que el esquema requerido llegó a la base de producción mediante la propagación de esquema de Replit. No ejecutes `pnpm db:migrate` contra producción; confirma allí las columnas/tablas requeridas antes de habilitar los envíos.
+
+`pnpm reminders:send` es un comando existente separado; no configura ni programa este envío por WhatsApp y no sustituye el endpoint ni el cron externo.
 
 ## Configuración de producción (referencia)
 
@@ -129,12 +161,13 @@ Se cargan en los secretos de la Autoscale Deployment; ninguno va al repositorio:
 - `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`
 - `EMAIL_FROM=Vector Bikes <reservas@send.vectorbikes.cl>`, `EMAIL_REPLY_TO=info@vectorbikes.cl`, `SHOP_NOTIFY_EMAIL=info@vectorbikes.cl`
 - `PUBLIC_WHATSAPP_NUMBER` si existe
+- Para habilitar la integración opcional de WhatsApp, configura también los secretos `WHATSAPP_ENABLED=true`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_GRAPH_VERSION`, `WHATSAPP_REMINDER_TEMPLATE`, `WHATSAPP_READY_TEMPLATE`, `WHATSAPP_TEMPLATE_LANGUAGE` y `CRON_SECRET` (mínimo 32 caracteres), siguiendo *Recordatorios*. No uses valores reales en `.env.example` ni los guardes en el repositorio.
 
 Las variables `PUBLIC_*` se hornean en el build: después de cambiarlas hay que volver a publicar.
 
 ### 3. Esquema de producción
 
-Tras la primera publicación, abre el panel *Database* de producción y confirma que están las 8 tablas: `bookings`, `booking_blocks`, `booking_days`, `blocked_periods`, `admin_users`, `admin_sessions`, `login_attempts` y `booking_requests`. La app nunca migra ni se corre `pnpm db:migrate` contra producción.
+Tras la primera publicación, abre el panel *Database* de producción y confirma que están las 9 tablas: `bookings`, `booking_blocks`, `booking_days`, `blocked_periods`, `admin_users`, `admin_sessions`, `login_attempts`, `booking_requests` y `whatsapp_messages`. La app nunca migra ni se corre `pnpm db:migrate` contra producción.
 
 ### 4. Cuenta admin en producción
 

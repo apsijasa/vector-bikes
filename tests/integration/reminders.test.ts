@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { cancelBooking } from "../../src/server/booking/cancel-booking.ts";
 import { createBooking } from "../../src/server/booking/create-booking.ts";
@@ -77,6 +78,18 @@ describe("recordatorios", () => {
 
     expect(await sendReminders(test.db, NOW)).toEqual({ sent: 0, failed: 0 });
     expect(consoleOutbox).toHaveLength(2);
+  });
+
+  it("mantiene los recordatorios de correo para reservas listas para retiro", async () => {
+    const booking = await newBooking(test.db, "taller", "2026-09-16", "15:00", "+56911111111");
+    await test.db
+      .update(bookings)
+      .set({ status: "ready_for_pickup" })
+      .where(eq(bookings.id, booking.id));
+
+    expect(await sendReminders(test.db, NOW)).toEqual({ sent: 1, failed: 0 });
+    expect(consoleOutbox).toHaveLength(1);
+    expect((await reminderState(test.db))[booking.id]).toBe(true);
   });
 
   it("un envío fallido suma a failed y deja la reserva sin marcar", async () => {

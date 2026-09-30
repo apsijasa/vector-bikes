@@ -107,6 +107,22 @@ describe("API pública", () => {
       fee: 0,
     });
     expect(onCreated).toHaveBeenCalledTimes(1);
+    const [booking] = await test.db
+      .select({ whatsappConsentAt: bookings.whatsappConsentAt })
+      .from(bookings);
+    expect(booking?.whatsappConsentAt).toBeNull();
+  });
+
+  it("guarda el consentimiento opcional de WhatsApp enviado por la API", async () => {
+    const response = await handleCreateBooking(
+      postRequest(body({ whatsapp_consentimiento: true })),
+      ctx,
+    );
+    expect(response.status).toBe(201);
+    const [booking] = await test.db
+      .select({ whatsappConsentAt: bookings.whatsappConsentAt })
+      .from(bookings);
+    expect(booking?.whatsappConsentAt?.toISOString()).toBe(NOW.toISOString());
   });
 
   it("en retiro el servidor calcula el fin con los dos bloques", async () => {

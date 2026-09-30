@@ -41,6 +41,7 @@ export const bookings = pgTable(
     address: text("address"),
     pickupFeeClp: integer("pickup_fee_clp").notNull().default(0),
     consentAt: instant("consent_at").notNull(),
+    whatsappConsentAt: instant("whatsapp_consent_at"),
     cancelTokenHash: text("cancel_token_hash").notNull(),
     cancelTokenUsedAt: instant("cancel_token_used_at"),
     cancelledAt: instant("cancelled_at"),
@@ -60,7 +61,7 @@ export const bookings = pgTable(
     check("bookings_mode_check", sql`mode in ('taller', 'retiro')`),
     check(
       "bookings_status_check",
-      sql`status in ('confirmed', 'cancelled', 'completed', 'no_show')`,
+      sql`status in ('confirmed', 'ready_for_pickup', 'cancelled', 'completed', 'no_show')`,
     ),
     check(
       "bookings_cancelled_by_check",
@@ -75,6 +76,36 @@ export const bookings = pgTable(
       sql`mode = 'taller' or (comuna in ('Vitacura', 'Las Condes') and address is not null)`,
     ),
     check("bookings_time_order_check", sql`ends_at > starts_at`),
+  ],
+);
+
+export const whatsappMessages = pgTable(
+  "whatsapp_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "restrict" }),
+    type: text("type").notNull(),
+    status: text("status").notNull().default("pending"),
+    metaMessageId: text("meta_message_id"),
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+    claimedAt: instant("claimed_at"),
+    sentAt: instant("sent_at"),
+    reconciledAt: instant("reconciled_at"),
+    reconciliationNote: text("reconciliation_note"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_whatsapp_booking_type").on(t.bookingId, t.type),
+    index("idx_whatsapp_status").on(t.status),
+    check("whatsapp_message_type_check", sql`type in ('reminder', 'ready')`),
+    check(
+      "whatsapp_message_status_check",
+      sql`status in ('pending', 'sending', 'sent', 'failed', 'unknown')`,
+    ),
   ],
 );
 
@@ -182,6 +213,7 @@ export const allTables = [
   adminSessions,
   loginAttempts,
   bookingRequests,
+  whatsappMessages,
 ] as const;
 
 export type Booking = typeof bookings.$inferSelect;
