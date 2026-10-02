@@ -40,6 +40,16 @@ describe("SEO del build", () => {
   it("la landing declara canonical y Open Graph", () => {
     expect(index).toContain(`rel="canonical" href="${home}"`);
     expect(index).toContain('property="og:image"');
+    expect(index).toContain(`content="${new URL("/brand/vector-bikes-logo.png", site).href}"`);
+  });
+
+  it("declara el favicon SVG con respaldo PNG y apple-touch-icon", () => {
+    expect(index).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg"');
+    expect(index).toContain(
+      '<link rel="icon" type="image/png" href="/brand/vector-bikes-logo.png"',
+    );
+    expect(index).toContain('<link rel="apple-touch-icon" href="/brand/vector-bikes-logo.png"');
+    expect(read("favicon.svg")).toContain('href="/brand/vector-bikes-logo.png"');
   });
 
   it("publica el aviso de privacidad sin JSON-LD", () => {

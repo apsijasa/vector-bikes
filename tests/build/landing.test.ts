@@ -44,6 +44,11 @@ describe("landing construida", () => {
     expect(occurrences('class="scale"')).toBe(2);
   });
 
+  it("muestra el logo en la portada sin la cota de la rueda", () => {
+    expect(html).toContain('<div class="mark"></div>');
+    expect(html).not.toContain("622 MM");
+  });
+
   it("renderiza WhatsApp solo si hay número configurado", () => {
     const href = whatsappHref(buildTimeWhatsapp());
     if (href === null) {

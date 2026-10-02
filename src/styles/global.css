@@ -130,11 +130,11 @@ p {
 }
 .wordmark {
   display: block;
-  width: 176px;
-  height: 34px;
+  width: 44px;
+  height: 36px;
   background-image: url("/brand/vector-bikes-logo.png");
-  background-size: 208px 208px;
-  background-position: -16px -145px;
+  background-size: 77px 77px;
+  background-position: -17px -13px;
   background-repeat: no-repeat;
   filter: var(--logo-filter);
 }
@@ -273,38 +273,17 @@ p {
 }
 
 .drawing {
-  position: relative;
   justify-self: center;
   width: min(100%, 380px);
-  margin-bottom: 34px;
 }
 .drawing .mark {
   width: 100%;
-  aspect-ratio: 734 / 626;
+  aspect-ratio: 917 / 1125;
   background-image: url("/brand/vector-bikes-logo.png");
-  background-size: 170.8% auto;
-  background-position: 40.8% 32.2%;
+  background-size: 136.8% auto;
+  background-position: 49.3% 41.9%;
   background-repeat: no-repeat;
   filter: var(--logo-filter);
-}
-.drawing svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.drawing svg line,
-.drawing svg path {
-  stroke: var(--steel);
-  stroke-width: 2.2;
-  fill: none;
-}
-.drawing svg text {
-  fill: var(--steel);
-  font-family: var(--mono);
-  font-size: 22px;
-  letter-spacing: 0.08em;
 }
 @media (max-width: 860px) {
   .hero .wrap {
