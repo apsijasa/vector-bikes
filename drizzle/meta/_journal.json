@@ -22,6 +22,13 @@
       "when": 1790802410328,
       "tag": "0002_familiar_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791241391991,
+      "tag": "0003_absent_bedlam",
+      "breakpoints": true
     }
   ]
 }

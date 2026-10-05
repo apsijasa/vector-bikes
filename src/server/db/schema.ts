@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   boolean,
   check,
@@ -13,9 +14,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-const instant = (name: string) => timestamp(name, { withTimezone: true });
-const createdAt = () => instant("created_at").notNull().defaultNow();
-const updatedAt = () =>
+export const instant = (name: string) => timestamp(name, { withTimezone: true });
+export const createdAt = () => instant("created_at").notNull().defaultNow();
+export const updatedAt = () =>
   instant("updated_at")
     .notNull()
     .defaultNow()
@@ -29,6 +30,7 @@ export const bookings = pgTable(
     serviceDate: date("service_date", { mode: "string" }).notNull(),
     mode: text("mode").notNull(),
     status: text("status").notNull().default("confirmed"),
+    source: text("source").notNull().default("web"),
     startsAt: instant("starts_at").notNull(),
     endsAt: instant("ends_at").notNull(),
     timezone: text("timezone").notNull().default("America/Santiago"),
@@ -59,6 +61,7 @@ export const bookings = pgTable(
     index("idx_bookings_phone_status_starts_at").on(t.phoneE164, t.status, t.startsAt),
     index("idx_bookings_reminder").on(t.serviceDate, t.status, t.reminderSentAt),
     check("bookings_mode_check", sql`mode in ('taller', 'retiro')`),
+    check("bookings_source_check", sql`source in ('web', 'telefono', 'whatsapp', 'presencial')`),
     check(
       "bookings_status_check",
       sql`status in ('confirmed', 'ready_for_pickup', 'cancelled', 'completed', 'no_show')`,
@@ -167,20 +170,60 @@ export const adminUsers = pgTable(
   (t) => [uniqueIndex("uq_admin_users_email").on(t.email)],
 );
 
+export const branches = pgTable(
+  "branches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    nextOrderNumber: integer("next_order_number").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_branches_name").on(t.name),
+    check("branches_next_order_number_check", sql`next_order_number >= 1`),
+  ],
+);
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    name: text("name").notNull(),
+    role: text("role").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_users_email").on(t.email),
+    index("idx_users_branch_role").on(t.branchId, t.role),
+    check("users_role_check", sql`role in ('owner', 'admin', 'reception', 'mechanic')`),
+  ],
+);
+
 export const adminSessions = pgTable(
   "admin_sessions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    adminUserId: uuid("admin_user_id")
-      .notNull()
-      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    adminUserId: uuid("admin_user_id").references(() => adminUsers.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull(),
     expiresAt: instant("expires_at").notNull(),
     revokedAt: instant("revoked_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("uq_admin_sessions_token_hash").on(t.tokenHash)],
+  (t) => [
+    uniqueIndex("uq_admin_sessions_token_hash").on(t.tokenHash),
+    index("idx_admin_sessions_user_id").on(t.userId),
+  ],
 );
 
 export const loginAttempts = pgTable(
@@ -214,8 +257,12 @@ export const allTables = [
   loginAttempts,
   bookingRequests,
   whatsappMessages,
+  branches,
+  users,
 ] as const;
 
 export type Booking = typeof bookings.$inferSelect;
 export type BlockedPeriod = typeof blockedPeriods.$inferSelect;
 export type AdminUser = typeof adminUsers.$inferSelect;
+export type Branch = typeof branches.$inferSelect;
+export type User = typeof users.$inferSelect;

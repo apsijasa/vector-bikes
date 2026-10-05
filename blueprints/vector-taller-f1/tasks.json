@@ -72,7 +72,7 @@
     ],
     "checkpoint": "f1-03",
     "files": ["src/server/db/schema.ts", "src/server/auth/permissions.ts", "tests/integration/users-schema.test.ts", "tests/unit/permissions.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T4",
