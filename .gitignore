@@ -25,3 +25,6 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
+
+# Documentos de Word: viven en el disco del dueño, no en el repositorio
+*.docx
