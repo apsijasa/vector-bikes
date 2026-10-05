@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { getCronEnv } from "../../lib/env.ts";
 import type { AppDb } from "../db/client.ts";
 import { sendPendingReminders } from "./service.ts";
 
@@ -13,7 +14,7 @@ export async function handleWhatsAppCron(
   request: Request,
   db: AppDb,
   now: Date,
-  secret: string | undefined = process.env.CRON_SECRET,
+  secret: string | undefined = getCronEnv().CRON_SECRET,
 ): Promise<Response> {
   const headers = { "cache-control": "no-store", "content-type": "application/json" };
   if (request.method !== "POST")

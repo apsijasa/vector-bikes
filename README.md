@@ -13,6 +13,7 @@ Sitio y reservas en línea del taller de bicicletas Vector Bikes (Av. Kennedy 76
 | Casilla del taller | `info@vectorbikes.cl` en **Microsoft 365**. Recibe los avisos de reservas nuevas y cancelaciones. |
 | Antispam | **Cloudflare Turnstile** con claves reales, verificado en producción. |
 | Panel admin | Operativo en `https://vectorbikes.cl/admin`, con agenda del día y vista de mes. Cuenta `info@vectorbikes.cl` creada en la base de producción. |
+| Recordatorios por correo | Cron externo de **Make.com** → `POST /api/tareas/recordatorios` (ver *Recordatorios por correo (cron externo)*). |
 | Recordatorios WhatsApp | **Opcionales**: requieren configuración de Meta y un cron externo (ver *Recordatorios*). |
 
 ## Operación diaria
@@ -104,6 +105,17 @@ pnpm gate   # check + test + build + test:build + smoke
   - `pnpm db:check` confirma que están todas las tablas.
 - Al publicar, Replit propaga el esquema a la base de producción. La app nunca migra al arrancar y `db:migrate` jamás se ejecuta contra producción.
 - Las reservas nunca se borran: se cambia su `status`.
+
+## Recordatorios por correo (cron externo)
+
+El recordatorio del día anterior a cada reserva lo dispara un escenario de **Make.com**, no una Scheduled Deployment (Replit no permitió una segunda publicación en la misma App).
+
+- Programación: diaria a las **10:00**, zona **America/Santiago**.
+- Llamada: módulo HTTP, `POST https://vectorbikes.cl/api/tareas/recordatorios`, cabecera `Authorization: Bearer <TASKS_SECRET>`, sin cuerpo, timeout de 120 segundos.
+- `TASKS_SECRET` (mínimo 32 caracteres; genéralo con `node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'`) va en los *Secrets* de la Autoscale Deployment y en Make.com, nunca en el repositorio.
+- Respuesta esperada: HTTP 200 con `{"ok":true,"sent":n}`. Cualquier otra (401, 500 o `"ok":false`) debe disparar el aviso por correo al dueño que se configura en el mismo escenario.
+- Llamarlo dos veces el mismo día no duplica correos: cada reserva queda marcada con `reminder_sent_at`.
+- Respaldo manual: `pnpm reminders:send` sigue existiendo y hace lo mismo desde el Shell de Replit con el `DATABASE_URL` de producción.
 
 ## Recordatorios
 
