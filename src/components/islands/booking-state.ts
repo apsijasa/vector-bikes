@@ -182,7 +182,7 @@ export function bookingReducer(state: State, action: Action): State {
       return { ...state, availability: { status: "error" } };
     case "selectDate": {
       const day = dayOf(state, action.date);
-      if (!day || day.status !== "open") {
+      if (day?.status !== "open") {
         return state;
       }
       return { ...state, selectedDate: action.date, selectedStart: null };
@@ -190,7 +190,7 @@ export function bookingReducer(state: State, action: Action): State {
     case "selectStart": {
       const day = state.selectedDate === null ? undefined : dayOf(state, state.selectedDate);
       const block = day?.blocks.find((item) => item.start === action.start);
-      if (!block || block.state !== "free") {
+      if (block?.state !== "free") {
         return state;
       }
       return {
