@@ -28,6 +28,8 @@ const dbSchema = z.object({ DATABASE_URL: required });
 const cancelSchema = z.object({ CANCEL_TOKEN_SECRET: secret });
 const turnstileSchema = z.object({ TURNSTILE_SECRET_KEY: required });
 const hashSchema = z.object({ SESSION_SECRET: secret });
+const tasksSchema = z.object({ TASKS_SECRET: secret });
+const cronSchema = z.object({ CRON_SECRET: z.string().optional() });
 const siteSchema = z.object({ PUBLIC_SITE_URL: z.url() });
 const emailSchema = z
   .object({
@@ -132,4 +134,12 @@ export function getWhatsAppEnv(source: EnvSource = process.env) {
     return parseSource(whatsappSchema, { WHATSAPP_ENABLED: source.WHATSAPP_ENABLED });
   }
   return parseSource(whatsappSchema, source);
+}
+
+export function getTasksEnv(source: EnvSource = process.env) {
+  return parseSource(tasksSchema, source);
+}
+
+export function getCronEnv(source: EnvSource = process.env) {
+  return parseSource(cronSchema, source);
 }

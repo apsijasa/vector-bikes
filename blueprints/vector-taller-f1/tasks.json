@@ -19,7 +19,7 @@
     ],
     "checkpoint": "f1-01",
     "files": ["src/lib/env.ts", "src/server/api/task-handlers.ts", "src/pages/api/tareas/recordatorios.ts", "tests/integration/tasks.test.ts", "scripts/smoke.sh"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T2",
