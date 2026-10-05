@@ -119,7 +119,7 @@
     ],
     "checkpoint": "f1-05",
     "files": ["src/pages/admin/login.astro", "src/pages/admin/index.astro", "src/pages/admin/bloqueos.astro", "src/pages/admin/reservas/[id].astro"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T6",

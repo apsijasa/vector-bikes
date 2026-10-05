@@ -4,8 +4,10 @@ import { getSiteEnv } from "../../lib/env.ts";
 import { clientIp } from "../../server/api/client-ip.ts";
 import { hashIp, isAllowedOrigin } from "../../server/api/handlers.ts";
 import {
+  defaultLanding,
   loginAdmin,
   loginFormSchema,
+  safeNextPath,
   SESSION_COOKIE,
   sessionCookieOptions,
 } from "../../server/auth/admin-auth.ts";
@@ -50,7 +52,7 @@ if (Astro.request.method === "POST") {
         result.token,
         sessionCookieOptions(getSiteEnv().PUBLIC_SITE_URL),
       );
-      return Astro.redirect("/admin", 303);
+      return Astro.redirect(safeNextPath(form.get("next")) ?? defaultLanding(result.role), 303);
     }
     error = result.code;
     Astro.response.status = result.code === "rate_limited" ? 429 : 401;
@@ -82,6 +84,7 @@ if (Astro.request.method === "POST") {
         )
       }
       <form method="post" action="/admin/login">
+        <input type="hidden" name="next" value={Astro.url.searchParams.get("next") ?? ""} />
         <div class="fields">
           <div class="field full">
             <label for="email">Correo</label>

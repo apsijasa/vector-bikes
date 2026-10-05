@@ -7,16 +7,16 @@ import {
   listUpcomingBlocks,
 } from "../../server/admin/agenda.ts";
 import { isAllowedOrigin } from "../../server/api/handlers.ts";
-import { requireAdmin, SESSION_COOKIE } from "../../server/auth/admin-auth.ts";
+import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../server/auth/admin-auth.ts";
+import { can, forbiddenResponse } from "../../server/auth/permissions.ts";
 import { localToday } from "../../server/booking/slots.ts";
 import { getDb } from "../../server/db/client.ts";
 
 export const prerender = false;
 
 const admin = await requireAdmin(getDb(), Astro.cookies.get(SESSION_COOKIE)?.value, new Date());
-if (!admin) {
-  return Astro.redirect("/admin/login", 303);
-}
+if (!admin) return Astro.redirect(loginRedirect(Astro.url.pathname + Astro.url.search), 303);
+if (!can(admin.role, "admin.panel")) return forbiddenResponse();
 
 Astro.response.headers.set("cache-control", "no-store");
 
@@ -79,6 +79,7 @@ const FIELDS = [
       <nav class="nav" aria-label="Panel" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:28px">
         <a href="/admin">Agenda</a>
         <a href="/admin/bloqueos" aria-current="page">Bloqueos</a>
+        <a href="/taller">Taller</a>
         <form method="post" action="/admin/logout">
           <button type="submit" class="btn ghost">Salir</button>
         </form>
