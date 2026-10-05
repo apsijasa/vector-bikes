@@ -134,8 +134,18 @@ Fuente: `docs/design-preview.html`. Monocromo, reglas de 1px, radio 2px, sin som
 
 Me quedo con entender el problema, planear, decidir la arquitectura y revisar lo que vuelve. Esa parte no se delega.
 
-La construcción repetitiva, los refactors grandes y los errores atorados se le pasan a Codex. El pase lo hago yo con el subagente `codex-rescue`, por mi cuenta, sin esperar que me lo pidan.
+La construcción repetitiva, los refactors grandes y los errores atorados se le pasan a Codex con el subagente `codex-rescue`, por mi cuenta, sin esperar que me lo pidan. Una tarea de `tasks.json` = un pase a Codex. Nunca dos pases a la vez: espero el resultado, lo leo y recién entonces sigo.
 
-Nada de lo que vuelve de Codex se da por bueno sin que yo lo revise. En cada pase cuento qué le pedí y qué volvió.
+Codex lee `AGENTS.md`, no este archivo ni `.claude/rules/`. Por eso cada encargo incluye:
 
-Si Codex falla dos veces en la misma tarea, esa tarea vuelve a mí. No hay tercer intento.
+- La tarea de `tasks.json` y los archivos exactos que toca.
+- La regla de `.claude/rules/` que aplica a esos archivos, nombrada por ruta para que la lea antes de empezar.
+- Los puntos de "No negociable" que tocan esa tarea (siempre: no editar `drizzle/`, no migrar fuera de la base dev, no commitear secretos ni `.env`).
+- Qué NO debe cambiar (firmas exportadas, otros módulos, el diseño aprobado).
+- El cierre: `pnpm format`, el Verify de la tarea y `pnpm gate` en verde.
+
+Antes de cada pase el árbol de git está limpio (commiteado). Si lo que vuelve está mal, se revierte con `git checkout .` y no se parcha encima.
+
+Nada de lo que vuelve de Codex se da por bueno sin que yo lo revise y sin `pnpm gate` en verde. En cada pase cuento qué le pedí y qué volvió, en dos líneas.
+
+Si Codex falla dos veces en la misma tarea, esa tarea vuelve a mí. No hay tercer intento: cuando algo se atora dos veces, lo que está mal es el encargo, no quién lo ejecuta.
