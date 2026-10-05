@@ -3,7 +3,9 @@ import { promisify } from "node:util";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "../db/client.ts";
-import { type AdminUser, adminSessions, adminUsers, loginAttempts } from "../db/schema.ts";
+import { adminSessions, adminUsers, branches, loginAttempts, users } from "../db/schema.ts";
+import { can } from "./permissions.ts";
+import type { Role } from "./permissions.ts";
 
 export const SESSION_COOKIE = "vb_admin_session";
 export const SESSION_DAYS = 7;
@@ -50,10 +52,24 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 /** Hash de una clave que nadie conoce: iguala el tiempo de respuesta para correos inexistentes. */
-let dummyHash: Promise<string> | undefined;
-function getDummyHash(): Promise<string> {
-  dummyHash ??= hashPassword(randomBytes(24).toString("base64url"));
+let dummyHash: string | undefined;
+function getDummyHash(): string {
+  dummyHash ??= `${HASH_PREFIX}${randomBytes(SALT_BYTES).toString("base64")}$${randomBytes(KEY_LENGTH).toString("base64")}`;
   return dummyHash;
+}
+
+/** Incluso un hash mal formado paga exactamente una verificación scrypt en el login. */
+async function loginPasswordMatches(password: string, stored?: string): Promise<boolean> {
+  const [salt, hash, ...rest] = stored?.slice(HASH_PREFIX.length).split("$") ?? [];
+  const valid = !!(
+    stored?.startsWith(HASH_PREFIX) &&
+    salt &&
+    hash &&
+    rest.length === 0 &&
+    Buffer.from(hash, "base64").length === KEY_LENGTH
+  );
+  const matches = await verifyPassword(password, valid && stored ? stored : getDummyHash());
+  return valid && matches;
 }
 
 function hashSessionToken(token: string): string {
@@ -64,7 +80,53 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** Crea o actualiza el admin y revoca todas sus sesiones abiertas. */
+export type SessionUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  branchId: string;
+};
+
+async function createOwner(db: AppDb, email: string, passwordHash: string, now: Date, id?: string) {
+  const [branch] = await db.select({ id: branches.id }).from(branches).limit(1);
+  const [created] = branch
+    ? []
+    : await db
+        .insert(branches)
+        .values({ name: "Vitacura", createdAt: now, updatedAt: now })
+        .returning({ id: branches.id });
+  const selected = branch ?? created;
+  if (!selected) {
+    throw new Error("No se pudo crear la sucursal");
+  }
+  const [user] = await db
+    .insert(users)
+    .values({
+      id,
+      branchId: selected.id,
+      email,
+      passwordHash,
+      name: email.split("@")[0] ?? email,
+      role: "owner",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  if (!user) {
+    throw new Error("No se pudo crear el usuario");
+  }
+  return user;
+}
+
+export async function revokeUserSessions(db: AppDb, userId: string, now: Date): Promise<void> {
+  await db
+    .update(adminSessions)
+    .set({ revokedAt: now, updatedAt: now })
+    .where(and(eq(adminSessions.userId, userId), isNull(adminSessions.revokedAt)));
+}
+
+/** Crea o actualiza el usuario y revoca todas sus sesiones abiertas. */
 export async function setAdminPassword(
   db: AppDb,
   email: string,
@@ -79,28 +141,23 @@ export async function setAdminPassword(
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
-      .select({ id: adminUsers.id })
-      .from(adminUsers)
-      .where(eq(adminUsers.email, normalized))
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, normalized))
       .for("update");
+    await tx.delete(adminSessions).where(isNull(adminSessions.userId));
     if (!existing) {
-      await tx.insert(adminUsers).values({ email: normalized, passwordHash });
+      await createOwner(tx, normalized, passwordHash, now);
       return "created";
     }
-    await tx
-      .update(adminUsers)
-      .set({ passwordHash, updatedAt: now })
-      .where(eq(adminUsers.id, existing.id));
-    await tx
-      .update(adminSessions)
-      .set({ revokedAt: now, updatedAt: now })
-      .where(and(eq(adminSessions.adminUserId, existing.id), isNull(adminSessions.revokedAt)));
+    await tx.update(users).set({ passwordHash, updatedAt: now }).where(eq(users.id, existing.id));
+    await revokeUserSessions(tx, existing.id, now);
     return "updated";
   });
 }
 
 export type LoginResult =
-  | { ok: true; token: string; expiresAt: Date }
+  | { ok: true; token: string; expiresAt: Date; role: Role }
   | { ok: false; code: "invalid" | "rate_limited" };
 
 async function recentFailures(db: AppDb, ipHash: string, email: string, now: Date) {
@@ -129,28 +186,39 @@ export async function loginAdmin(
     return { ok: false, code: "rate_limited" };
   }
 
-  const [admin] = await db
-    .select({ id: adminUsers.id, passwordHash: adminUsers.passwordHash })
-    .from(adminUsers)
-    .where(eq(adminUsers.email, email))
-    .limit(1);
-  const stored = admin?.passwordHash ?? (await getDummyHash());
-  const matches = await verifyPassword(args.password, stored);
-  if (!admin || !matches) {
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const [admin] = user
+    ? []
+    : await db
+        .select({ id: adminUsers.id, passwordHash: adminUsers.passwordHash })
+        .from(adminUsers)
+        .where(eq(adminUsers.email, email))
+        .limit(1);
+  const credentials = user ?? admin;
+  const matches = await loginPasswordMatches(args.password, credentials?.passwordHash);
+  if (!credentials || !matches || (user && !user.isActive)) {
     await db.insert(loginAttempts).values({ ipHash, email, createdAt: now });
     return { ok: false, code: "invalid" };
   }
 
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE * 1000);
-  await db.insert(adminSessions).values({
-    adminUserId: admin.id,
-    tokenHash: hashSessionToken(token),
-    expiresAt,
-    createdAt: now,
-    updatedAt: now,
+  const role = await db.transaction(async (tx) => {
+    const actor =
+      user ?? (await createOwner(tx, email, credentials.passwordHash, now, credentials.id));
+    if (!user) {
+      await tx.delete(adminSessions).where(isNull(adminSessions.userId));
+    }
+    await tx.insert(adminSessions).values({
+      userId: actor.id,
+      tokenHash: hashSessionToken(token),
+      expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return actor.role as Role;
   });
-  return { ok: true, token, expiresAt };
+  return { ok: true, token, expiresAt, role };
 }
 
 /** Un token de sesión mide 43 caracteres base64url; lo demás no llega a la base. */
@@ -161,24 +229,48 @@ export async function requireAdmin(
   db: AppDb,
   token: string | undefined,
   now: Date,
-): Promise<AdminUser | null> {
+): Promise<SessionUser | null> {
   const parsed = tokenSchema.safeParse(token);
   if (!parsed.success) {
     return null;
   }
   const [row] = await db
-    .select({ admin: adminUsers })
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      branchId: users.branchId,
+    })
     .from(adminSessions)
-    .innerJoin(adminUsers, eq(adminUsers.id, adminSessions.adminUserId))
+    .innerJoin(users, eq(users.id, adminSessions.userId))
     .where(
       and(
         eq(adminSessions.tokenHash, hashSessionToken(parsed.data)),
         isNull(adminSessions.revokedAt),
         gt(adminSessions.expiresAt, now),
+        eq(users.isActive, true),
       ),
     )
     .limit(1);
-  return row?.admin ?? null;
+  return row ? { ...row, role: row.role as Role } : null;
+}
+
+export function safeNextPath(raw: unknown): string | null {
+  return typeof raw === "string" &&
+    raw.length <= 512 &&
+    (raw === "/admin" || raw === "/taller" || /^\/(taller|admin)[/?#]/.test(raw)) &&
+    !raw.includes("//")
+    ? raw
+    : null;
+}
+
+export function loginRedirect(path: string): string {
+  return `/admin/login?next=${encodeURIComponent(path)}`;
+}
+
+export function defaultLanding(role: Role): string {
+  return can(role, "admin.panel") ? "/admin" : "/taller";
 }
 
 export async function logoutAdmin(db: AppDb, token: string | undefined, now: Date): Promise<void> {

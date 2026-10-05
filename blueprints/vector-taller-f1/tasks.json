@@ -95,7 +95,7 @@
     ],
     "checkpoint": "f1-04",
     "files": ["src/server/auth/admin-auth.ts", "scripts/admin-set-password.ts", "tests/integration/admin-auth.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T5",

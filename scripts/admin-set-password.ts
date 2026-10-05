@@ -14,7 +14,7 @@ try {
 try {
   const email = adminEnv.ADMIN_EMAIL.trim().toLowerCase();
   const action = await setAdminPassword(getDb(), email, adminEnv.ADMIN_PASSWORD, new Date());
-  console.log(JSON.stringify({ ok: true, email, action }));
+  console.log(JSON.stringify({ ok: true, email, action, role: "owner" }));
   process.exit(0);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
