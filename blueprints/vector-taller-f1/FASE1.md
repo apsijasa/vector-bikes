@@ -7,7 +7,12 @@ Este documento es la entrada para generar el blueprint de la fase 1. No es el bl
 
 Ubicación: `blueprints/vector-taller-f1/FASE1.md`, en el repositorio. La copia de OneDrive es respaldo; la que manda es la del repo.
 
-Fuentes: "Sistema de Gestión Integral — Vector Bikes" (49 secciones) y `Analisis sistema de gestion - 3 oct 2026.md`, en `blueprints/vector-taller-f1/fuentes/`. Donde este documento contradiga a esos dos, manda este.
+Fuentes, las dos en `fuentes/`:
+
+- `Especificacion sistema de gestion - 49 secciones.md` — los requisitos originales, textuales.
+- `Analisis sistema de gestion - 3 oct 2026.md` — el análisis técnico de esos requisitos.
+
+Este documento ya incorpora todo lo que importa de las dos. Donde las contradiga, manda este: las decisiones de §2 son posteriores y cerradas. No hay ninguna otra fuente que buscar.
 
 ---
 
@@ -372,7 +377,7 @@ Los primeros trece se verifican en el blueprint, paso por paso. El catorce lo ve
 **Requisitos previos, en este orden:**
 
 1. Este documento leído y aprobado. El plan generado va a ser tan bueno como las definiciones que reciba.
-2. El plugin `the-architect` cargando. Al 5 de octubre aparecía como `failed to load` en `claude plugin list`. Se repara en la terminal con `claude plugin marketplace update soyenriquerocha` y `claude plugin install the-architect@soyenriquerocha`; si sigue fallando, el autor movió el plugin y hay que revisar su repositorio antes de seguir.
+2. El plugin `the-architect` cargando. Verificado el 5 de octubre: `claude plugin list` lo muestra como `the-architect@soyenriquerocha` v2.5.0, enabled. Si alguna vez aparece como `failed to load`, se repara con `claude plugin marketplace update soyenriquerocha` y `claude plugin install the-architect@soyenriquerocha`.
 3. Este archivo y sus fuentes commiteados en `blueprints/vector-taller-f1/`, con el árbol de git limpio.
 4. Respaldos de la base activados en Replit (§12, punto 1).
 
@@ -386,7 +391,7 @@ Y se le entrega este encargo:
 
 ```
 Lee el documento de definición de fase en blueprints/vector-taller-f1/FASE1.md
-y sus fuentes en blueprints/vector-taller-f1/fuentes/, y construye el blueprint
+y sus dos fuentes en blueprints/vector-taller-f1/fuentes/, y construye el blueprint
 de la fase 1 del Sistema de Gestión Integral sobre este proyecto existente.
 
 Escribe el bundle en blueprints/vector-taller-f1/. No modifiques
