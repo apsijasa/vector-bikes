@@ -16,6 +16,6 @@ paths:
 - Formularios: `label` visible con `for`, `.fields{align-items:start}`, `.field{align-content:start}`, errores en texto con `aria-invalid` y `aria-describedby`.
 - Un solo `h1` por página, niveles sin saltos; controles nativos (`button`, `a`, `details`), nunca `div` clicable.
 - Transiciones con `var(--dur-fast)`/`var(--dur)`; sin `!important`.
-- Una sola isla (`BookingIsland`, `client:visible`); todo lo demás es HTML estático.
+- En el sitio público, una sola isla (`BookingIsland`, `client:visible`); todo lo demás es HTML estático. El área `/taller` tiene sus propias reglas en `.claude/rules/taller-ui.md`.
 - WhatsApp: si `PUBLIC_WHATSAPP_NUMBER` está vacío, el botón no se renderiza.
 - Etiquetas no-void siempre cerradas (Astro 7).

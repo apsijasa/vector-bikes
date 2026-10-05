@@ -5,9 +5,10 @@ if (existsSync(".env")) {
   process.loadEnvFile(".env");
 }
 
+// Fase 1: el esquema se reparte en schema.ts, schema-taller.ts y schema-orders.ts (< 400 líneas cada uno).
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./src/server/db/schema.ts",
+  schema: "./src/server/db/schema*.ts",
   out: "./drizzle",
   dbCredentials: {
     url: process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/vector_bikes",
