@@ -25,6 +25,8 @@ const MESSAGES = {
 
 let error: keyof typeof MESSAGES | null = null;
 let email = "";
+// El destino viaja en el formulario: un intento fallido lo conserva para el reintento.
+let next = safeNextPath(Astro.url.searchParams.get("next"));
 
 if (Astro.request.method === "POST") {
   if (!isAllowedOrigin(Astro.request)) {
@@ -32,12 +34,13 @@ if (Astro.request.method === "POST") {
     Astro.response.status = 403;
   } else {
     const form = await Astro.request.formData();
+    next = safeNextPath(form.get("next"));
     const parsed = loginFormSchema.safeParse({
       email: form.get("email"),
       password: form.get("password"),
     });
     email = typeof form.get("email") === "string" ? String(form.get("email")) : "";
-    const ip = clientIp(Astro.request, Astro.clientAddress) ?? "sin-ip-conocida";
+    const ip = clientIp(Astro.request, null) ?? Astro.clientAddress ?? "sin-ip-conocida";
     const result = parsed.success
       ? await loginAdmin(getDb(), {
           email: parsed.data.email,
@@ -52,7 +55,7 @@ if (Astro.request.method === "POST") {
         result.token,
         sessionCookieOptions(getSiteEnv().PUBLIC_SITE_URL),
       );
-      return Astro.redirect(safeNextPath(form.get("next")) ?? defaultLanding(result.role), 303);
+      return Astro.redirect(next ?? defaultLanding(result.role), 303);
     }
     error = result.code;
     Astro.response.status = result.code === "rate_limited" ? 429 : 401;
@@ -84,7 +87,7 @@ if (Astro.request.method === "POST") {
         )
       }
       <form method="post" action="/admin/login">
-        <input type="hidden" name="next" value={Astro.url.searchParams.get("next") ?? ""} />
+        <input type="hidden" name="next" value={next ?? ""} />
         <div class="fields">
           <div class="field full">
             <label for="email">Correo</label>
