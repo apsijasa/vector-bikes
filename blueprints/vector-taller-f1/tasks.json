@@ -1,0 +1,850 @@
+[
+  {
+    "id": "E1-T1",
+    "title": "F1-01 Add authenticated reminders task endpoint",
+    "epic": "01-fundaciones",
+    "dependencies": [],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `handleRemindersTask` recibe un POST sin cabecera `Authorization`, con un bearer distinto de `TASKS_SECRET` o sin `TASKS_SECRET` configurado THE SYSTEM SHALL responder 401 con `{\"ok\":false,\"error\":\"unauthorized\"}` sin llamar a `sendReminders`",
+      "WHEN recibe un POST con `Authorization: Bearer <TASKS_SECRET>` y hay una reserva confirmada para mañana sin recordatorio THE SYSTEM SHALL responder 200 con `{\"ok\":true,\"sent\":1}` y marcar `reminder_sent_at`",
+      "WHEN el mismo POST se repite el mismo día THE SYSTEM SHALL responder 200 con `{\"ok\":true,\"sent\":0}` sin enviar un segundo correo",
+      "WHEN algún envío falla THE SYSTEM SHALL responder 500 con `{\"ok\":false,\"sent\":n,\"failed\":m}`",
+      "WHEN se rechaza un intento THE SYSTEM SHALL registrar `tasks.unauthorized` sin correos, teléfonos ni el secreto en los logs",
+      "WHEN `sh scripts/smoke.sh` corre contra el build THE SYSTEM SHALL obtener 401 de `POST /api/tareas/recordatorios` sin cabecera"
+    ],
+    "verify": [
+      "pnpm test tests/integration/tasks.test.ts tests/integration/reminders.test.ts tests/integration/whatsapp.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-01",
+    "files": ["src/lib/env.ts", "src/server/api/task-handlers.ts", "src/pages/api/tareas/recordatorios.ts", "tests/integration/tasks.test.ts", "scripts/smoke.sh"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T2",
+    "title": "F1-02 Read CRON_SECRET via env and document cutover",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `handleWhatsAppCron` se llama sin el argumento `secret` THE SYSTEM SHALL leer `CRON_SECRET` con `getCronEnv()` de `src/lib/env.ts`, sin `process.env` en `src/server/whatsapp/cron.ts`",
+      "WHEN corre `pnpm test tests/integration/whatsapp.test.ts` THE SYSTEM SHALL pasar sin cambios en ese archivo",
+      "WHEN se lee `.env.example` THE SYSTEM SHALL contener una línea `TASKS_SECRET=` con un valor de al menos 32 caracteres",
+      "WHEN se lee `README.md` THE SYSTEM SHALL contener la sección `## Recordatorios por correo (cron externo)` con `POST https://vectorbikes.cl/api/tareas/recordatorios`",
+      "WHEN se lee `blueprints/vector-bikes/blueprint.md` THE SYSTEM SHALL contener la fila `| 25 | Recordatorios por correo disparados por un cron externo de Make.com` y el punto `**Lanzamiento — cron externo de recordatorios**`, y ninguna línea con `Lanzamiento — Scheduled Deployment`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/whatsapp.test.ts tests/integration/tasks.test.ts   # expect: exit 0, 0 failed",
+      "grep -q 'getCronEnv' src/server/whatsapp/cron.ts   # expect: exit 0",
+      "grep -q 'process.env' src/server/whatsapp/cron.ts; test $? -eq 1   # expect: 1 = sin coincidencias → la línea sale 0",
+      "grep -Eq '^TASKS_SECRET=.{32,}$' .env.example   # expect: exit 0",
+      "grep -qF '## Recordatorios por correo (cron externo)' README.md   # expect: exit 0",
+      "grep -qF 'POST https://vectorbikes.cl/api/tareas/recordatorios' README.md   # expect: exit 0",
+      "grep -qF '| 25 | Recordatorios por correo disparados por un cron externo de Make.com' blueprints/vector-bikes/blueprint.md   # expect: exit 0",
+      "grep -qF -- '- [ ] **Lanzamiento — cron externo de recordatorios**' blueprints/vector-bikes/blueprint.md   # expect: exit 0",
+      "grep -qF 'Lanzamiento — Scheduled Deployment' blueprints/vector-bikes/blueprint.md; test $? -eq 1   # expect: 1 = el punto viejo ya no está",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-02",
+    "files": ["src/server/whatsapp/cron.ts", ".env.example", "README.md", "blueprints/vector-bikes/blueprint.md"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T3",
+    "title": "F1-03 Expand schema: branches, users, booking source",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `pnpm db:migrate` aplica la migración que emite `pnpm db:generate` THE SYSTEM SHALL crear `branches` y `users`, agregar `admin_sessions.user_id` y `bookings.source` y dejar `admin_users` intacta",
+      "WHEN se inserta en `users` un `role` fuera de `owner`, `admin`, `reception` y `mechanic` THE SYSTEM SHALL rechazarlo con código `23514`",
+      "WHEN se inserta una reserva sin `source` THE SYSTEM SHALL guardar `web`",
+      "WHEN se inserta `bookings.source` fuera de `web`, `telefono`, `whatsapp` y `presencial` THE SYSTEM SHALL rechazarlo con código `23514`",
+      "WHEN se inserta una sesión en `admin_sessions` sin `admin_user_id` THE SYSTEM SHALL aceptarla",
+      "WHEN `can(role, action)` se evalúa THE SYSTEM SHALL devolver `true` para `owner` en toda acción salvo `dashboard.mechanic`, `true` para `mechanic` en `reception.perform`, `false` para `mechanic` en `admin.panel`, `catalog.edit`, `items.override_price` y `qc.approve`, y `false` para `admin` en `users.manage`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/users-schema.test.ts tests/unit/permissions.test.ts tests/integration/foundation.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0, {\"ok\":true,...}",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-03",
+    "files": ["src/server/db/schema.ts", "src/server/auth/permissions.ts", "tests/integration/users-schema.test.ts", "tests/unit/permissions.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T4",
+    "title": "F1-04 Move sessions to users with copy-on-login",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN un correo existe solo en `admin_users` e inicia sesión con su clave correcta THE SYSTEM SHALL, en una transacción, crear la sucursal `Vitacura` si no hay ninguna, insertar en `users` una fila con el mismo `id`, rol `owner` y el nombre de la parte local del correo, borrar las filas de `admin_sessions` con `user_id` nulo y crear la sesión con `user_id`",
+      "WHEN ese usuario vuelve a iniciar sesión THE SYSTEM SHALL autenticarlo contra `users` sin crear otra fila en `users`",
+      "WHEN `requireAdmin` recibe el token de una sesión con `user_id` nulo, revocada, expirada o de un usuario con `is_active = false` THE SYSTEM SHALL devolver `null`",
+      "WHEN `setAdminPassword` corre THE SYSTEM SHALL crear en `users` un usuario `owner` para un correo nuevo (y la sucursal si falta) o cambiar el `password_hash` y revocar las sesiones de uno existente, y borrar las sesiones con `user_id` nulo",
+      "WHEN `safeNextPath` evalúa un `next` THE SYSTEM SHALL aceptar solo rutas relativas bajo `/taller` o `/admin` (`/taller/ordenes?x=1` sí; `//evil.com`, `https://evil.com` y `/otra` → `null`)",
+      "WHEN `scripts/admin-set-password.ts` corre sin `ADMIN_EMAIL` ni `ADMIN_PASSWORD` y con un `DATABASE_URL` inalcanzable THE SYSTEM SHALL salir con código 1 y un mensaje que nombra `ADMIN_EMAIL`, sin intentar conectarse a la base"
+    ],
+    "verify": [
+      "pnpm test tests/integration/admin-auth.test.ts tests/integration/admin-panel.test.ts   # expect: exit 0, 0 failed",
+      "out=\"$(DATABASE_URL=postgres://127.0.0.1:1/x env -u ADMIN_EMAIL -u ADMIN_PASSWORD node scripts/admin-set-password.ts 2>&1)\"; test $? -eq 1 && printf '%s' \"$out\" | grep -q ADMIN_EMAIL   # expect: exit 0 — código 1 y error de configuración, no de conexión",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-04",
+    "files": ["src/server/auth/admin-auth.ts", "scripts/admin-set-password.ts", "tests/integration/admin-auth.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T5",
+    "title": "F1-05 Add login next param and role gate on /admin",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T4"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN un grep recorre `src/pages/admin/index.astro`, `src/pages/admin/bloqueos.astro` y `src/pages/admin/reservas/[id].astro` THE SYSTEM SHALL encontrar en cada una `\"admin.panel\"`, `forbiddenResponse()` y `href=\"/taller\"`",
+      "WHEN un grep recorre `src/pages/admin/login.astro` THE SYSTEM SHALL encontrar `name=\"next\"` y `safeNextPath`",
+      "WHEN `sh scripts/smoke.sh` corre THE SYSTEM SHALL seguir obteniendo 303 en `/admin` sin sesión",
+      "WHEN corren `tests/integration/admin-panel.test.ts` y `tests/integration/admin-month.test.ts` THE SYSTEM SHALL pasar sin cambios en esos archivos"
+    ],
+    "verify": [
+      "grep -q '\"admin.panel\"' src/pages/admin/index.astro && grep -q 'forbiddenResponse()' src/pages/admin/index.astro && grep -q 'href=\"/taller\"' src/pages/admin/index.astro   # expect: exit 0",
+      "grep -q '\"admin.panel\"' src/pages/admin/bloqueos.astro && grep -q 'forbiddenResponse()' src/pages/admin/bloqueos.astro && grep -q 'href=\"/taller\"' src/pages/admin/bloqueos.astro   # expect: exit 0",
+      "grep -q '\"admin.panel\"' 'src/pages/admin/reservas/[id].astro' && grep -q 'forbiddenResponse()' 'src/pages/admin/reservas/[id].astro' && grep -q 'href=\"/taller\"' 'src/pages/admin/reservas/[id].astro'   # expect: exit 0",
+      "grep -q 'name=\"next\"' src/pages/admin/login.astro && grep -q 'safeNextPath' src/pages/admin/login.astro   # expect: exit 0",
+      "pnpm test tests/integration/admin-panel.test.ts tests/integration/admin-month.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0 (el smoke afirma /admin 303)"
+    ],
+    "checkpoint": "f1-05",
+    "files": ["src/pages/admin/login.astro", "src/pages/admin/index.astro", "src/pages/admin/bloqueos.astro", "src/pages/admin/reservas/[id].astro"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T6",
+    "title": "F1-06 Add /taller area and tablet test harness",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T5"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN se pide `/taller` sin sesión THE SYSTEM SHALL redirigir a `/admin/login?next=%2Ftaller`",
+      "WHEN el dueño inicia sesión con toques en el viewport de tablet THE SYSTEM SHALL llevarlo a `/taller` con el `h1` `Taller` y el texto exacto `Dueño` visible",
+      "WHEN el mecánico con sesión pide `/admin` THE SYSTEM SHALL responder 403",
+      "WHEN `node -p` lee `scripts['test:tablet']` y `scripts.gate` de `package.json` THE SYSTEM SHALL obtener `playwright test` y `pnpm check && pnpm test && pnpm build && pnpm test:build && pnpm test:tablet && pnpm smoke`",
+      "WHEN se lee `.env.example` THE SYSTEM SHALL contener la línea `E2E_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/vector_bikes_e2e`"
+    ],
+    "verify": [
+      "test \"$(node -p \"require('./package.json').scripts['test:tablet']\")\" = \"playwright test\"   # expect: exit 0",
+      "test \"$(node -p \"require('./package.json').scripts.gate\")\" = \"pnpm check && pnpm test && pnpm build && pnpm test:build && pnpm test:tablet && pnpm smoke\"   # expect: exit 0",
+      "grep -qx 'E2E_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/vector_bikes_e2e' .env.example   # expect: exit 0",
+      "pnpm build && pnpm test:tablet e2e/login.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-06",
+    "files": ["src/layouts/TallerLayout.astro", "src/pages/taller/index.astro", "e2e/login.spec.ts", "package.json", ".env.example"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T7",
+    "title": "F1-07 Add user management and audit log",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T6"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el dueño crea un usuario rol `mechanic` con clave de al menos 12 caracteres THE SYSTEM SHALL insertarlo activo en la sucursal del dueño, de modo que `loginAdmin` con esas credenciales devuelve `ok: true`",
+      "WHEN un usuario `admin` llama `createUser` THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }` sin insertar filas",
+      "WHEN el dueño desactiva un usuario o le resetea la clave THE SYSTEM SHALL revocar todas las sesiones abiertas de ese usuario",
+      "WHEN el dueño intenta desactivarse o cambiar su propio rol THE SYSTEM SHALL devolver `{ ok: false, code: \"self_change\" }`",
+      "WHEN se crea, desactiva, cambia de rol o resetea la clave de un usuario THE SYSTEM SHALL escribir una fila en `audit_log` con `actor_user_id`, `action`, `entity = 'users'` y `details` sin correos ni claves"
+    ],
+    "verify": [
+      "pnpm test tests/integration/users-admin.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-07",
+    "files": ["src/server/db/schema-taller.ts", "src/server/taller/audit.ts", "src/server/taller/users.ts", "src/pages/taller/usuarios.astro", "tests/integration/users-admin.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T8",
+    "title": "F1-08 Add image storage layer (local and Replit)",
+    "epic": "01-fundaciones",
+    "dependencies": ["E1-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el driver `local` guarda, lee, consulta y borra una clave en un directorio temporal THE SYSTEM SHALL devolver los mismos bytes y `exists` verdadero antes del borrado y `get` nulo y `exists` falso después",
+      "WHEN el driver `replit` corre con un cliente falso inyectado THE SYSTEM SHALL traducir `uploadFromBytes`, `downloadAsBytes`, `exists` y `delete` a la misma interfaz y lanzar `StorageError` ante un resultado `ok: false`",
+      "WHEN `processPhoto` recibe un JPEG de 3000×2000 generado con sharp THE SYSTEM SHALL devolver una copia completa JPEG con lado mayor ≤ 2000 px y una miniatura con lado mayor ≤ 400 px",
+      "WHEN `processPhoto` recibe un JPEG de 300×100 con orientación EXIF 6 THE SYSTEM SHALL devolver una copia de 100×300 sin orientación EXIF",
+      "WHEN `processPhoto` recibe bytes que no son imagen THE SYSTEM SHALL lanzar `InvalidImageError`",
+      "WHEN `getStorageEnv` corre con `REPLIT_DEPLOYMENT` definida y `STORAGE_DRIVER` distinto de `replit` THE SYSTEM SHALL lanzar `EnvError` que nombra `STORAGE_DRIVER`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/storage.test.ts   # expect: exit 0, 0 failed",
+      "grep -qx 'STORAGE_DRIVER=local' .env.example   # expect: exit 0",
+      "grep -q '@img/sharp-linux-x64' pnpm-lock.yaml   # expect: exit 0 — binario de sharp para Replit",
+      "grep -q '@img/sharp-libvips-linux-x64' pnpm-lock.yaml   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-08",
+    "files": ["src/server/storage/storage.ts", "src/server/storage/images.ts", "src/lib/env.ts", ".env.example", "tests/integration/storage.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T1",
+    "title": "F1-09 Add service catalog with prices per bike type",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E1-T7"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el dueño o un administrador crea un servicio con nombre, descripción, duración estimada, materiales habituales y recomendaciones THE SYSTEM SHALL guardarlo en `services` con el `branch_id` de su sucursal",
+      "WHEN se fija el precio de un servicio para un tipo `mtb`, `ruta`, `gravel`, `urbana` o `ebike` THE SYSTEM SHALL mantener una sola fila por (`service_id`, `bike_type`) en `service_prices`",
+      "WHEN un mecánico llama `setServicePrice` THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }` y dejar `service_prices` sin cambios",
+      "WHEN el dueño cambia un precio THE SYSTEM SHALL escribir en `audit_log` una fila `catalog.price_changed` con su `actor_user_id`, `created_at` y `details` con `before` y `after`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/catalog.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-09",
+    "files": ["src/server/db/schema-taller.ts", "src/server/taller/rules.ts", "src/server/taller/catalog.ts", "src/pages/taller/catalogo/index.astro", "src/pages/taller/catalogo/[id].astro", "tests/integration/catalog.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T2",
+    "title": "F1-10 Add customers schema, RUT validation and server",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E2-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `normalizeRut` recibe `12.345.678-5`, `123456785`, `10.000.013-k` o `12.345.675-0` THE SYSTEM SHALL devolver `12345678-5`, `12345678-5`, `10000013-K` y `12345675-0`",
+      "WHEN `normalizeRut` recibe `12.345.678-4`, `12345678`, `abc` o una cadena vacía THE SYSTEM SHALL devolver `null`",
+      "WHEN se crea un cliente con un teléfono o un RUT que ya existe en la sucursal THE SYSTEM SHALL devolver `{ ok: false, code: \"duplicate\", existing }` con el `id` y el nombre de la ficha existente, sin insertar",
+      "WHEN se reintenta con el mismo teléfono y `allowPhoneDuplicate: true` THE SYSTEM SHALL crear la ficha, y con un RUT repetido seguir devolviendo `duplicate`",
+      "WHEN se crea un cliente con RUT con puntos y teléfono `9 1234 5678` THE SYSTEM SHALL guardar el RUT normalizado y el teléfono `+56912345678`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/customers.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-10",
+    "files": ["src/server/db/schema-taller.ts", "src/lib/rut.ts", "src/server/taller/customers.ts", "tests/integration/customers.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T3",
+    "title": "F1-11 Add customer screens",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E2-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el dueño completa `Nuevo cliente` con nombre `Laura Prueba` y teléfono `9 5555 6666` en el viewport de tablet THE SYSTEM SHALL mostrar la ficha con el nombre `Laura Prueba`",
+      "WHEN intenta crear otro cliente con el mismo teléfono THE SYSTEM SHALL mostrar `Ya existe: Laura Prueba` con el enlace `Usar ficha existente`",
+      "WHEN el mecánico pide `/taller/clientes` THE SYSTEM SHALL responder 403"
+    ],
+    "verify": [
+      "pnpm build && pnpm test:tablet e2e/clientes.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-11",
+    "files": ["src/pages/taller/clientes/index.astro", "src/pages/taller/clientes/nuevo.astro", "src/pages/taller/clientes/[id].astro", "e2e/clientes.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T4",
+    "title": "F1-12 Add bikes under customers",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E2-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN se crea una bicicleta para un cliente con marca, modelo, tipo y datos opcionales (año, talla, color, número de serie, kilometraje anotado) THE SYSTEM SHALL guardarla con el `customer_id` y el `branch_id` del cliente",
+      "WHEN el tipo no es `mtb`, `ruta`, `gravel`, `urbana` ni `ebike` THE SYSTEM SHALL rechazarlo como error de validación sin insertar",
+      "WHEN `listBikesOfCustomer` corre para un cliente con dos bicicletas THE SYSTEM SHALL devolver ambas",
+      "WHEN se guarda un kilometraje anotado negativo THE SYSTEM SHALL rechazarlo sin cambiar la fila"
+    ],
+    "verify": [
+      "pnpm test tests/integration/bikes.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-12",
+    "files": ["src/server/db/schema-taller.ts", "src/server/taller/bikes.ts", "src/pages/taller/clientes/[id].astro", "src/pages/taller/bicicletas/[id].astro", "tests/integration/bikes.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T5",
+    "title": "F1-13 Add unified search by name, phone or RUT",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E2-T4"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `searchTaller` recibe parte de un nombre en minúsculas THE SYSTEM SHALL devolver los clientes de la sucursal cuyo nombre la contiene sin distinguir mayúsculas",
+      "WHEN recibe un teléfono como `9 1111 2222` o `+56911112222` THE SYSTEM SHALL devolver el cliente con `phone_e164` `+56911112222`",
+      "WHEN recibe un RUT con o sin puntos THE SYSTEM SHALL devolver el cliente con ese RUT normalizado",
+      "WHEN recibe `%` o `_` THE SYSTEM SHALL tratarlos como texto literal y no como comodín",
+      "WHEN el actor pertenece a otra sucursal THE SYSTEM SHALL devolver una lista vacía de clientes"
+    ],
+    "verify": [
+      "pnpm test tests/integration/search.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-13",
+    "files": ["src/server/taller/search.ts", "src/pages/taller/buscar.astro", "tests/integration/search.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T6",
+    "title": "F1-14 Add manual bookings for staff",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E1-T6"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN el personal crea una reserva manual con `source` `telefono` THE SYSTEM SHALL guardarla con `source = 'telefono'` mediante `createBooking`, y una reserva del sitio SHALL seguir guardándose con `source = 'web'`",
+      "WHEN se piden cinco reservas manuales para el mismo día en bloques distintos THE SYSTEM SHALL aceptar cuatro y rechazar la quinta con `slot_unavailable`",
+      "WHEN 20 reservas manuales concurrentes piden el mismo bloque THE SYSTEM SHALL aceptar exactamente una",
+      "WHEN el teléfono ya tiene una reserva futura THE SYSTEM SHALL rechazar la manual con `phone_limit`",
+      "WHEN la reserva manual se confirma THE SYSTEM SHALL enviar después del commit el correo `Reserva confirmada` al cliente, igual que una reserva del sitio",
+      "WHEN un mecánico llama `createManualBooking` THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/manual-booking.test.ts tests/integration/create-booking.test.ts tests/integration/concurrency.test.ts tests/integration/api.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-14",
+    "files": ["src/server/booking/create-booking.ts", "src/server/taller/manual-booking.ts", "src/pages/taller/reservas/index.astro", "src/pages/taller/reservas/nueva.astro", "tests/integration/manual-booking.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T7",
+    "title": "F1-15 Add work orders schema, statuses and numbering",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E2-T5"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `startReception` crea 10 órdenes concurrentes en la misma sucursal THE SYSTEM SHALL asignar los números 1 a 10 sin repetir y dejar `branches.next_order_number` en 11",
+      "WHEN `formatOrderNumber` recibe 1 y 12345 THE SYSTEM SHALL devolver `OT-00001` y `OT-12345`",
+      "WHEN `prefillFromBooking` lee una reserva cuyo teléfono ya tiene ficha THE SYSTEM SHALL devolver esa ficha en `existingCustomer`, y si no la tiene SHALL devolver nombre, teléfono y correo de la reserva en `prefill`",
+      "WHEN se crea una orden THE SYSTEM SHALL dejarla en `reservada` con una fila de historial (`from_status` nulo → `reservada`, con autor) y una fila `order.created` en `audit_log`, asignada al actor si es mecánico",
+      "WHEN un UPDATE directo en SQL pone `entregada` con `paid_clp` distinto de `total_clp` THE SYSTEM SHALL rechazarlo con código `23514`",
+      "WHEN un UPDATE directo en SQL pone `lista_para_retirar` con `qc_approved_at` nulo THE SYSTEM SHALL rechazarlo con código `23514`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/work-orders.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-15",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/rules.ts", "src/server/taller/orders.ts", "tests/integration/work-orders.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T8",
+    "title": "F1-16 Start reception on tablet from booking or walk-in",
+    "epic": "02-catalogo-clientes-entrada",
+    "dependencies": ["E2-T6", "E2-T7"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el dueño toca `Recibir` en la reserva sembrada de `Carla Reserva` THE SYSTEM SHALL mostrar el formulario con nombre, teléfono y correo de la reserva ya escritos",
+      "WHEN toca el tipo `MTB` y `Crear orden` THE SYSTEM SHALL crear la orden en `reservada` y mostrar en `/taller/ordenes/<id>/recepcion` un número `OT-` de cinco dígitos y el nombre `Carla Reserva`",
+      "WHEN la reserva ya tiene una orden THE SYSTEM SHALL mostrar en `/taller/reservas` el número de esa orden en lugar de `Recibir`",
+      "WHEN el mecánico pide `/taller/reservas` THE SYSTEM SHALL responder 403"
+    ],
+    "verify": [
+      "pnpm build && pnpm test:tablet e2e/recepcion-inicio.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-16",
+    "files": ["src/pages/taller/recepcion/nueva.astro", "src/pages/taller/ordenes/[id]/recepcion.astro", "src/server/taller/manual-booking.ts", "src/pages/taller/reservas/index.astro", "e2e/recepcion-inicio.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T1",
+    "title": "F1-17 Add intake checklist and accessories",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E2-T8"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN se guardan los siete puntos del checklist (`frenos`, `cadena`, `transmision`, `ruedas`, `neumaticos`, `estado_general`, `problemas_visibles`) con resultado `ok`, `revisar` o `malo` THE SYSTEM SHALL guardar una fila por punto en `intake_checks` y `isChecklistComplete` SHALL devolver `true`",
+      "WHEN se vuelve a guardar un punto THE SYSTEM SHALL actualizar su fila sin duplicarla",
+      "WHEN se agrega un accesorio y luego se quita THE SYSTEM SHALL conservar la fila con `voided_at` y `voided_by` y dejar de listarlo",
+      "WHEN se guardan las observaciones THE SYSTEM SHALL dejarlas en `work_orders.observations`",
+      "WHEN el mecánico inicia una recepción sin reserva para el cliente sembrado y toca `OK` en los siete puntos y `Guardar checklist` en el viewport de tablet THE SYSTEM SHALL mostrar `Checklist completo`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/intake.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm build && pnpm test:tablet e2e/recepcion-checklist.spec.ts e2e/recepcion-inicio.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-17",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/intake.ts", "src/pages/taller/ordenes/[id]/recepcion.astro", "tests/integration/intake.test.ts", "e2e/recepcion-checklist.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T2",
+    "title": "F1-18 Add order lines, totals and delivery date",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN se agrega desde el catálogo un servicio a una orden de una bicicleta tipo `mtb` THE SYSTEM SHALL crear una línea `servicio` de origen `inicial` con el precio de `service_prices` para `mtb` y la duración estimada del servicio",
+      "WHEN se agregan o anulan líneas THE SYSTEM SHALL dejar `total_clp` y `estimated_minutes` iguales a la suma recalculada desde las filas no anuladas",
+      "WHEN el servicio no tiene precio para el tipo de la bicicleta THE SYSTEM SHALL devolver `{ ok: false, code: \"no_price\" }` sin insertar",
+      "WHEN `suggestDeliveryDate` corre con `now` `2026-10-05T15:00:00.000Z` y todos los días hábiles THE SYSTEM SHALL devolver `2026-10-06` sin carga, `2026-10-07` con 300 minutos el 06 y una orden de 90, `2026-10-06` con 270 minutos el 06 y una orden de 90, y `2026-10-07` para una orden de 400 minutos con 30 minutos el 06",
+      "WHEN `suggestDeliveryDate` corre con el calendario real y `now` `2026-10-10T15:00:00.000Z` sin carga THE SYSTEM SHALL saltar el domingo 11 y el feriado del 12 y devolver `2026-10-13`",
+      "WHEN la persona confirma una fecha THE SYSTEM SHALL guardar `estimated_delivery_date` y `delivery_date_confirmed_at`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/items.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm build && pnpm test:tablet e2e/recepcion-checklist.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-18",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/items.ts", "src/server/taller/delivery-date.ts", "src/pages/taller/ordenes/[id]/recepcion.astro", "tests/integration/items.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T3",
+    "title": "F1-19 Add photo upload and authenticated media route",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T2", "E1-T8"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `handlePhotoUpload` recibe un `multipart/form-data` con un JPEG y `etapa=recepcion` de un usuario con permiso THE SYSTEM SHALL guardar la copia completa y la miniatura en el almacenamiento, insertar una fila en `order_photos` con `retention_class = 'recepcion_6m'` y responder 201 con `{ id, thumbUrl }`, y con `etapa=terminado` SHALL guardar `retention_class = 'permanente'`",
+      "WHEN el archivo supera 15 MB o no es una imagen THE SYSTEM SHALL responder 413 o 415 respectivamente, sin filas ni objetos nuevos",
+      "WHEN la inserción de la fila falla después de subir los objetos THE SYSTEM SHALL borrar ambos objetos del almacenamiento",
+      "WHEN `handleMediaRequest` recibe la clave de la miniatura de una orden accesible THE SYSTEM SHALL responder 200 con `content-type: image/jpeg` y `cache-control: private, max-age=300`, y 404 para una clave inexistente o con forma inválida",
+      "WHEN un mecánico sube una foto de etapa `reparacion` a una orden que no tiene asignada THE SYSTEM SHALL responder 403",
+      "WHEN `sh scripts/smoke.sh` corre contra el build THE SYSTEM SHALL obtener 401 de `POST /taller/ordenes/x/fotos` sin sesión"
+    ],
+    "verify": [
+      "pnpm test tests/integration/photos.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm build && sh scripts/smoke.sh   # expect: exit 0 — incluye 401 de POST /taller/ordenes/x/fotos sin sesión",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-19",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/photos.ts", "src/pages/taller/ordenes/[id]/fotos.ts", "src/pages/taller/media/[...key].ts", "tests/integration/photos.test.ts", "scripts/smoke.sh"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T4",
+    "title": "F1-20 Add reception signature and finalization",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `finalizeReception` corre sin checklist completo, sin fotos de recepción, sin fecha confirmada o sin firma THE SYSTEM SHALL devolver `{ ok: false, code: \"incomplete\", missing }` nombrando cada faltante con `checklist`, `fotos`, `fecha` o `firma` y dejar la orden en `reservada`",
+      "WHEN corre con todo completo y una firma PNG válida THE SYSTEM SHALL guardar la firma en el almacenamiento, insertar `order_signatures` tipo `recepcion` con el nombre de quien firma, pasar la orden a `recibida` con `received_at` y escribir historial y auditoría",
+      "WHEN la firma no es un `data:image/png;base64,` válido o supera 2 MB THE SYSTEM SHALL devolver `{ ok: false, code: \"invalid_signature\" }` sin subir nada",
+      "WHEN la transacción falla después de subir la firma THE SYSTEM SHALL borrar el objeto subido",
+      "WHEN la orden ya tiene firma de recepción THE SYSTEM SHALL devolver `{ ok: false, code: \"already_signed\" }`",
+      "WHEN `handleMediaRequest` recibe la clave de una firma de una orden accesible THE SYSTEM SHALL responder 200 con `content-type: image/png`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/reception.test.ts tests/integration/photos.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-20",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/reception.ts", "src/server/taller/photos.ts", "tests/integration/reception.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T5",
+    "title": "F1-21 Complete reception on tablet: photos, signature",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T4"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el dueño hace en el viewport de tablet una recepción completa desde la reserva de `Pedro Reserva` (checklist con toques, servicio, fecha confirmada, cuatro fotos y firma dibujada) THE SYSTEM SHALL mostrar el estado `Recibida`",
+      "WHEN se suben las cuatro fotos THE SYSTEM SHALL mostrar cuatro miniaturas servidas desde `/taller/media/`",
+      "WHEN se toca `Finalizar recepción` sin firma THE SYSTEM SHALL mostrar `Falta la firma del cliente` y mantener el estado `Reservada`",
+      "WHEN se toca `Borrar` en el panel de firma THE SYSTEM SHALL dejar vacío el campo oculto `firma`"
+    ],
+    "verify": [
+      "pnpm build && pnpm test:tablet e2e/recepcion-completa.spec.ts e2e/recepcion-checklist.spec.ts e2e/recepcion-inicio.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-21",
+    "files": ["src/components/taller/PhotoCapture.tsx", "src/components/taller/SignaturePad.tsx", "src/pages/taller/ordenes/[id]/cierre.astro", "src/pages/taller/ordenes/[id]/recepcion.astro", "e2e/recepcion-completa.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T6",
+    "title": "F1-22 Add order detail, status changes and assignment",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T5"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `changeOrderStatus` pide una transición que no está en `MANUAL_TRANSITIONS`, como `recibida` → `lista_para_retirar` THE SYSTEM SHALL devolver `{ ok: false, code: \"invalid_transition\" }` sin cambiar la orden",
+      "WHEN una transición manual válida se aplica THE SYSTEM SHALL escribir una fila en `work_order_status_history` con `from_status`, `to_status`, autor y nota, y una fila `order.status_changed` en `audit_log`",
+      "WHEN un mecánico abre una orden asignada a otro mecánico THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }`",
+      "WHEN un mecánico toma una orden sin asignar en `recibida` o `diagnostico` THE SYSTEM SHALL asignársela y escribir `order.assigned` en `audit_log`",
+      "WHEN `listOrders` corre para un mecánico THE SYSTEM SHALL devolver solo sus órdenes asignadas y las sin asignar en `reservada`, `recibida` o `diagnostico`",
+      "WHEN el mecánico toca `Pasar a Diagnóstico` en la orden sembrada `OT-00001` en el viewport de tablet THE SYSTEM SHALL mostrar el estado `Diagnóstico`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/order-status.test.ts   # expect: exit 0, 0 failed",
+      "pnpm build && pnpm test:tablet e2e/orden-mecanico.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-22",
+    "files": ["src/server/taller/status.ts", "src/pages/taller/ordenes/index.astro", "src/pages/taller/ordenes/[id]/index.astro", "tests/integration/order-status.test.ts", "e2e/orden-mecanico.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T7",
+    "title": "F1-23 Add printable QR label and order number search",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T6"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `qrPayload` recibe `https://vectorbikes.cl` y el id de una orden THE SYSTEM SHALL devolver `https://vectorbikes.cl/taller/ordenes/<id>`, y `buildLabel` SHALL pasar exactamente ese texto al generador de QR inyectado",
+      "WHEN se genera la etiqueta de una orden THE SYSTEM SHALL devolver HTML con el número `OT-`, el nombre del cliente, la fecha estimada, un `<svg`, `size: 62mm` y el atributo `data-qr-url` con la URL codificada",
+      "WHEN el nombre del cliente contiene `<b>` THE SYSTEM SHALL escaparlo como `&lt;b&gt;`",
+      "WHEN `searchTaller` recibe `OT-00001`, `ot1` o `1` THE SYSTEM SHALL devolver la orden número 1 de la sucursal si el usuario puede verla",
+      "WHEN el dueño abre la etiqueta de `OT-00001` y luego la URL de su `data-qr-url` en el viewport de tablet THE SYSTEM SHALL mostrar `OT-00001` en ambas"
+    ],
+    "verify": [
+      "pnpm test tests/integration/label.test.ts tests/integration/search.test.ts   # expect: exit 0, 0 failed",
+      "pnpm build && pnpm test:tablet e2e/etiqueta.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-23",
+    "files": ["src/server/taller/label.ts", "src/pages/taller/ordenes/[id]/etiqueta.ts", "src/server/taller/search.ts", "tests/integration/label.test.ts", "e2e/etiqueta.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E3-T8",
+    "title": "F1-24 Add line editing, price override and tax doc",
+    "epic": "03-recepcion-orden",
+    "dependencies": ["E3-T6"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN un mecánico intenta cambiar el precio de una línea o agregar un repuesto con precio THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }` sin cambiar ninguna fila",
+      "WHEN el dueño o un administrador cambia el precio de una línea THE SYSTEM SHALL guardar el nuevo `unit_price_clp`, recalcular `total_clp` y escribir `item.price_changed` en `audit_log` con `before` y `after`",
+      "WHEN se anula una línea THE SYSTEM SHALL conservar la fila con `voided_at` y `voided_by` y excluirla de `total_clp`",
+      "WHEN se agrega un repuesto con descripción, cantidad y precio THE SYSTEM SHALL crear una línea `repuesto` y sumar su subtotal al total",
+      "WHEN se guardan tipo, folio y fecha del documento tributario THE SYSTEM SHALL dejarlos en `tax_doc_type`, `tax_doc_number` y `tax_doc_date` y escribir `order.tax_document` en `audit_log`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/order-items.test.ts tests/integration/items.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-24",
+    "files": ["src/server/taller/items.ts", "src/server/taller/orders.ts", "src/pages/taller/ordenes/[id]/lineas.astro", "tests/integration/order-items.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E4-T1",
+    "title": "F1-25 Add stage photo gallery and linked warranty",
+    "epic": "04-adicionales-cierre",
+    "dependencies": ["E3-T8", "E3-T7"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `openWarrantyOrder` corre sobre una orden `entregada` THE SYSTEM SHALL crear una orden nueva en `reservada` con el mismo cliente y bicicleta y `warranty_of_order_id` apuntando a la original",
+      "WHEN la orden original no está `entregada` THE SYSTEM SHALL devolver `{ ok: false, code: \"not_delivered\" }` sin crear orden",
+      "WHEN se abre una garantía THE SYSTEM SHALL escribir `order.warranty_opened` en `audit_log`",
+      "WHEN `orderDetail` lee una orden de garantía THE SYSTEM SHALL incluir el número de la orden original para mostrar `Garantía de OT-…`",
+      "WHEN `listOrderPhotos` lee una orden con fotos de las tres etapas THE SYSTEM SHALL agruparlas por `recepcion`, `reparacion` y `terminado` sin incluir las anuladas",
+      "WHEN el mecánico sube en el viewport de tablet una foto de trabajo terminado en la orden sembrada `OT-00002` desde su galería THE SYSTEM SHALL mostrar su miniatura en la sección `Trabajo terminado`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/warranty.test.ts   # expect: exit 0, 0 failed",
+      "pnpm build && pnpm test:tablet e2e/galeria.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-25",
+    "files": ["src/server/taller/orders.ts", "src/pages/taller/ordenes/[id]/galeria.astro", "src/pages/taller/ordenes/[id]/index.astro", "tests/integration/warranty.test.ts", "e2e/galeria.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E4-T2",
+    "title": "F1-26 Add additional work proposal with one-use link",
+    "epic": "04-adicionales-cierre",
+    "dependencies": ["E4-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el personal crea una propuesta con problema, recomendación y precio sobre una orden en `diagnostico`, `en_reparacion` o `esperando_repuesto` THE SYSTEM SHALL insertar `work_order_approvals` y pasar la orden a `esperando_aprobacion` con historial",
+      "WHEN se crea la propuesta THE SYSTEM SHALL devolver un token de 43 caracteres base64url y guardar solo su sha256 en hex de 64 caracteres en `token_hash`",
+      "WHEN se arma el enlace para WhatsApp THE SYSTEM SHALL devolver `https://wa.me/<dígitos del teléfono>?text=` con el enlace `<PUBLIC_SITE_URL>/aprobacion/<token>` codificado",
+      "WHEN un mecánico crea una propuesta THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }`",
+      "WHEN se regenera el enlace de una propuesta sin responder THE SYSTEM SHALL reemplazar `token_hash`, de modo que el token anterior deja de encontrarla",
+      "WHEN se crea la propuesta THE SYSTEM SHALL escribir `approval.created` en `audit_log` sin el token"
+    ],
+    "verify": [
+      "pnpm test tests/integration/approvals.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-26",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/share-tokens.ts", "src/server/taller/approvals.ts", "src/pages/taller/ordenes/[id]/adicional.astro", "tests/integration/approvals.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E4-T3",
+    "title": "F1-27 Add public approval page for the customer",
+    "epic": "04-adicionales-cierre",
+    "dependencies": ["E4-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el cliente aprueba con un token válido THE SYSTEM SHALL marcar `decided_at` y `decision = 'aprobado'`, crear una línea `servicio` de origen `adicional` con el precio de la propuesta, recalcular `total_clp`, devolver la orden a `en_reparacion` si no quedan propuestas pendientes y escribir `approval.decided` con `actor_user_id` nulo",
+      "WHEN el cliente rechaza THE SYSTEM SHALL guardar `decision = 'rechazado'` sin crear línea y devolver la orden a `en_reparacion` si no quedan propuestas pendientes",
+      "WHEN dos respuestas llegan a la vez con el mismo token THE SYSTEM SHALL aplicar exactamente una y devolver `already_decided` a la otra",
+      "WHEN el token no existe o tiene forma inválida THE SYSTEM SHALL devolver `{ view: \"invalid\" }`",
+      "WHEN `viewApproval` arma la vista THE SYSTEM SHALL incluir el primer nombre del cliente, el problema, la recomendación y el precio, sin teléfono ni correo",
+      "WHEN se registran 5 intentos desde la misma IP en 10 minutos THE SYSTEM SHALL hacer que `checkRateLimit` devuelva una respuesta 429"
+    ],
+    "verify": [
+      "pnpm test tests/integration/approvals.test.ts tests/integration/api.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-27",
+    "files": ["src/pages/aprobacion/[token].astro", "src/server/taller/approvals.ts", "src/server/api/handlers.ts", "tests/integration/approvals.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E4-T4",
+    "title": "F1-28 Add quality control approved by the owner",
+    "epic": "04-adicionales-cierre",
+    "dependencies": ["E4-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN el dueño aprueba con todos los puntos en `ok` el control de una orden en `control_calidad` asignada a un mecánico THE SYSTEM SHALL guardar los puntos en `qc_checks`, fijar `qc_approved_at` y `qc_approved_by`, dejar `qc_self_checked = false` y pasar la orden a `lista_para_retirar`",
+      "WHEN el dueño aprueba una orden asignada a sí mismo o sin mecánico THE SYSTEM SHALL marcar `qc_self_checked = true` y `self_check = true` en los puntos",
+      "WHEN un mecánico, un administrador o recepción intentan aprobar THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }`",
+      "WHEN algún punto queda en `falla` THE SYSTEM SHALL guardar los puntos, no fijar `qc_approved_at` y devolver la orden a `en_reparacion`",
+      "WHEN la orden no está en `control_calidad` THE SYSTEM SHALL devolver `{ ok: false, code: \"invalid_status\" }`",
+      "WHEN el dueño toca `OK` en cada punto y `Aprobar control` en la orden sembrada `OT-00002` en el viewport de tablet THE SYSTEM SHALL mostrar `Lista para retirar`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/qc.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm build && pnpm test:tablet e2e/control-calidad.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-28",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/qc.ts", "src/pages/taller/ordenes/[id]/control.astro", "tests/integration/qc.test.ts", "e2e/control-calidad.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E4-T5",
+    "title": "F1-29 Record deposit and final payments",
+    "epic": "04-adicionales-cierre",
+    "dependencies": ["E4-T4"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN se registra un abono con método y monto THE SYSTEM SHALL insertarlo en `payments`, recalcular `paid_clp` desde los pagos no anulados en la misma transacción y escribir `payment.recorded` en `audit_log`",
+      "WHEN se registra un segundo abono vigente en la misma orden THE SYSTEM SHALL rechazarlo por el índice único parcial y devolver `{ ok: false, code: \"deposit_exists\" }`",
+      "WHEN el monto supera el saldo (`total_clp - paid_clp`) o no es positivo THE SYSTEM SHALL devolver `{ ok: false, code: \"invalid_amount\" }`",
+      "WHEN se anula un pago THE SYSTEM SHALL conservar la fila con `voided_at` y `voided_by`, recalcular `paid_clp` y permitir un nuevo abono",
+      "WHEN un mecánico registra un pago THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/payments.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-29",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/payments.ts", "src/pages/taller/ordenes/[id]/entrega.astro", "tests/integration/payments.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E4-T6",
+    "title": "F1-30 Complete delivery with zero balance and signature",
+    "epic": "04-adicionales-cierre",
+    "dependencies": ["E4-T5"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `completeDelivery` corre sobre una orden `lista_para_retirar` con saldo distinto de cero THE SYSTEM SHALL devolver `{ ok: false, code: \"balance_pending\" }` y dejar la orden sin cambios",
+      "WHEN el saldo es cero y la firma es válida THE SYSTEM SHALL guardar la firma de tipo `entrega`, pasar la orden a `entregada` con `delivered_at` y escribir historial y `order.delivered` en `audit_log`",
+      "WHEN la orden no está en `lista_para_retirar` THE SYSTEM SHALL devolver `{ ok: false, code: \"invalid_status\" }`",
+      "WHEN el dueño registra en el viewport de tablet el pago final de la orden sembrada `OT-00003`, dibuja la firma y toca `Entregar bicicleta` THE SYSTEM SHALL mostrar `Entregada`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/delivery.test.ts tests/integration/payments.test.ts   # expect: exit 0, 0 failed",
+      "pnpm build && pnpm test:tablet e2e/entrega.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-30",
+    "files": ["src/server/taller/delivery.ts", "src/pages/taller/ordenes/[id]/entrega.astro", "tests/integration/delivery.test.ts", "e2e/entrega.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T1",
+    "title": "F1-31 Record installed and replaced components",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E4-T6"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN se instala un componente ligado a una línea `repuesto` de la orden THE SYSTEM SHALL guardar tipo, marca, modelo, número de serie, fecha de instalación y el precio de esa línea, con la bicicleta y la orden",
+      "WHEN se instala un componente que reemplaza a otro THE SYSTEM SHALL fijar en el anterior `replaced_at` y `replaced_by_component_id` sin borrarlo",
+      "WHEN se anula un componente THE SYSTEM SHALL conservar la fila con `voided_at` y `voided_by`",
+      "WHEN `listComponentsOfBike` corre THE SYSTEM SHALL incluir los componentes reemplazados con su fecha de reemplazo",
+      "WHEN la línea indicada no es un `repuesto` de esa orden THE SYSTEM SHALL devolver `{ ok: false, code: \"invalid_item\" }`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/components.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-31",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/components.ts", "src/pages/taller/ordenes/[id]/componentes.astro", "tests/integration/components.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T2",
+    "title": "F1-32 Generate the final service report",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E5-T1"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN se genera el informe de una orden THE SYSTEM SHALL guardar en `service_reports.snapshot` datos de la bicicleta, trabajo realizado, problemas encontrados, componentes reemplazados, fotos de antes (`recepcion`) y después (`terminado`), kilometraje anotado, recomendaciones, próximas revisiones, trabajos rechazados y un único total",
+      "WHEN el informe se genera THE SYSTEM SHALL devolver un token de 43 caracteres y guardar solo su sha256 en `share_token_hash`",
+      "WHEN se regenera THE SYSTEM SHALL reemplazar el snapshot y el hash, de modo que el token anterior deja de servir",
+      "WHEN el snapshot se arma THE SYSTEM SHALL incluir solo el primer nombre del cliente y ningún teléfono, correo ni RUT",
+      "WHEN un mecánico genera el informe THE SYSTEM SHALL devolver `{ ok: false, code: \"forbidden\" }`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/reports.test.ts   # expect: exit 0, 0 failed",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-32",
+    "files": ["src/server/db/schema-orders.ts", "src/server/taller/reports.ts", "src/components/taller/ReportView.astro", "src/pages/taller/ordenes/[id]/informe.astro", "tests/integration/reports.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T3",
+    "title": "F1-33 Add public read-only report page",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E5-T2"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `viewReportByToken` recibe el token vigente THE SYSTEM SHALL devolver el snapshot y las miniaturas de antes y después como `data:image/jpeg;base64,`",
+      "WHEN recibe un token anterior a una regeneración, inexistente o con forma inválida THE SYSTEM SHALL devolver `null`",
+      "WHEN la copia completa de una foto de recepción fue purgada por retención THE SYSTEM SHALL seguir devolviendo su miniatura",
+      "WHEN arma la vista pública THE SYSTEM SHALL no incluir teléfono, correo ni RUT del cliente"
+    ],
+    "verify": [
+      "pnpm test tests/integration/reports.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-33",
+    "files": ["src/pages/informe/[token].astro", "src/server/taller/reports.ts", "tests/integration/reports.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T4",
+    "title": "F1-34 Add bike and customer timelines",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E5-T3"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `bikeTimeline` corre para una bicicleta con dos visitas THE SYSTEM SHALL devolver ambas órdenes en orden cronológico con sus servicios, componentes instalados y reemplazados, adicionales rechazados e informes",
+      "WHEN un componente fue reemplazado THE SYSTEM SHALL incluir en la línea de tiempo tanto su instalación como su reemplazo",
+      "WHEN un adicional fue rechazado THE SYSTEM SHALL incluirlo como evento `approval_rejected` con su descripción y fecha",
+      "WHEN `customerTimeline` corre THE SYSTEM SHALL devolver visitas, órdenes, pagos no anulados y garantías del cliente en orden cronológico",
+      "WHEN `sortTimeline` recibe eventos desordenados con el mismo instante THE SYSTEM SHALL ordenarlos por instante y, a igualdad, por tipo en forma estable"
+    ],
+    "verify": [
+      "pnpm test tests/integration/history.test.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-34",
+    "files": ["src/server/taller/history.ts", "src/pages/taller/bicicletas/[id].astro", "src/pages/taller/clientes/[id].astro", "tests/integration/history.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T5",
+    "title": "F1-35 Add role dashboards for admin and mechanic",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E5-T4"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `adminDashboard` corre con órdenes sembradas en cada estado THE SYSTEM SHALL poner cada orden en su grupo nombrado (`waitingApproval`, `waitingParts`, `inRepair`, `qcPending`, `readyForPickup`) según su estado",
+      "WHEN una orden abierta tiene `estimated_delivery_date` anterior a hoy THE SYSTEM SHALL incluirla en `overdue`, y una `entregada` con fecha pasada SHALL quedar fuera",
+      "WHEN hay pagos recibidos hoy THE SYSTEM SHALL sumar en `incomeTodayClp` solo los no anulados de hoy",
+      "WHEN `mechanicDashboard` corre para un mecánico THE SYSTEM SHALL incluir solo sus órdenes asignadas en los grupos y las sin asignar en `reservada`, `recibida` o `diagnostico` en `unassigned`",
+      "WHEN el mecánico entra en el viewport de tablet THE SYSTEM SHALL mostrar en `/taller` el encabezado `Bicicletas asignadas` con `OT-00001`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/dashboard.test.ts   # expect: exit 0, 0 failed",
+      "pnpm build && pnpm test:tablet e2e/dashboard-mecanico.spec.ts e2e/login.spec.ts   # expect: exit 0, 0 failed",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-35",
+    "files": ["src/server/taller/dashboard.ts", "src/pages/taller/index.astro", "tests/integration/dashboard.test.ts", "e2e/dashboard-mecanico.spec.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T6",
+    "title": "F1-36 Add overdue alerts and photo retention tasks",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E5-T5"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `POST /api/tareas/alertas` o `POST /api/tareas/retencion` llegan sin el bearer de `TASKS_SECRET` THE SYSTEM SHALL responder 401 con `{\"ok\":false,\"error\":\"unauthorized\"}`",
+      "WHEN hay órdenes con fecha estimada anterior a hoy en Santiago en estados distintos de `entregada`, `cancelada` y `trabajo_rechazado` THE SYSTEM SHALL enviar un correo a `SHOP_NOTIFY_EMAIL` que lista sus números y responder 200 con `{\"ok\":true,\"overdue\":n,\"sent\":true}`",
+      "WHEN no hay órdenes atrasadas THE SYSTEM SHALL responder `{\"ok\":true,\"overdue\":0,\"sent\":false}` sin enviar correo",
+      "WHEN corre la retención THE SYSTEM SHALL borrar del almacenamiento solo las copias completas de fotos `recepcion_6m` con más de 6 meses, conservar sus miniaturas, fijar `full_purged_at` y responder `{\"ok\":true,\"purged\":n}`",
+      "WHEN la retención corre por segunda vez THE SYSTEM SHALL responder `{\"ok\":true,\"purged\":0}`",
+      "WHEN se lee `README.md` THE SYSTEM SHALL listar `POST https://vectorbikes.cl/api/tareas/alertas` y `POST https://vectorbikes.cl/api/tareas/retencion`"
+    ],
+    "verify": [
+      "pnpm test tests/integration/tasks-maintenance.test.ts tests/integration/tasks.test.ts   # expect: exit 0, 0 failed",
+      "grep -qF 'POST https://vectorbikes.cl/api/tareas/alertas' README.md   # expect: exit 0",
+      "grep -qF 'POST https://vectorbikes.cl/api/tareas/retencion' README.md   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-36",
+    "files": ["src/server/api/task-handlers.ts", "src/pages/api/tareas/alertas.ts", "src/pages/api/tareas/retencion.ts", "src/server/taller/maintenance.ts", "tests/integration/tasks-maintenance.test.ts", "README.md"],
+    "status": "pending"
+  },
+  {
+    "id": "E5-T7",
+    "title": "F1-37 Contract legacy admin tables, close phase gate",
+    "epic": "05-historial-operacion",
+    "dependencies": ["E5-T6"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `pnpm db:migrate` aplica la migración que emite `pnpm db:generate` THE SYSTEM SHALL eliminar `admin_users` y `admin_sessions.admin_user_id` y dejar `admin_sessions.user_id` NOT NULL",
+      "WHEN se busca `adminUsers` en `src/` y `scripts/` THE SYSTEM SHALL no encontrar ninguna referencia",
+      "WHEN `pnpm db:check` corre THE SYSTEM SHALL restar las tablas eliminadas por `DROP TABLE` en `drizzle/*.sql`, no esperar `admin_users` y verificar las columnas de `allTables`, `tallerTables` y `orderTables`",
+      "WHEN corre `pnpm test tests/integration/admin-auth.test.ts` THE SYSTEM SHALL pasar con login, sesión, cambio de clave y límite de intentos sobre `users`",
+      "WHEN se lee `README.md` THE SYSTEM SHALL contener la sección `## Operación del taller`",
+      "WHEN corre `pnpm gate` THE SYSTEM SHALL salir 0 con todos los tests y specs de la tabla de criterios de FASE1 §14 en verde"
+    ],
+    "verify": [
+      "pnpm test tests/integration/admin-auth.test.ts   # expect: exit 0, 0 failed",
+      "grep -rq 'adminUsers' src scripts; test $? -eq 1   # expect: 1 = sin referencias → la línea sale 0",
+      "pnpm db:migrate   # expect: exit 0",
+      "pnpm db:check   # expect: exit 0, {\"ok\":true,...}",
+      "grep -qF '## Operación del taller' README.md   # expect: exit 0",
+      "pnpm format && pnpm gate   # expect: exit 0"
+    ],
+    "checkpoint": "f1-37",
+    "files": ["src/server/db/schema.ts", "src/server/auth/admin-auth.ts", "scripts/db-check.ts", "tests/integration/admin-auth.test.ts", "README.md"],
+    "status": "pending"
+  }
+]
