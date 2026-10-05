@@ -129,3 +129,13 @@ Fuente: `docs/design-preview.html`. Monocromo, reglas de 1px, radio 2px, sin som
 5. Nunca editar a mano `drizzle/` (se regenera desde `schema.ts`).
 6. No construir nada de los No-Objetivos de `blueprint.md` §1 (pago en línea, cuentas de clientes, reprogramación, E2E con navegador, feriados 2027 inventados).
 7. Nunca marcar una tarea como hecha con una compuerta fallando, ni editar un comando de Verify para que pase.
+
+## Reparto con Codex
+
+Me quedo con entender el problema, planear, decidir la arquitectura y revisar lo que vuelve. Esa parte no se delega.
+
+La construcción repetitiva, los refactors grandes y los errores atorados se le pasan a Codex. El pase lo hago yo con el subagente `codex-rescue`, por mi cuenta, sin esperar que me lo pidan.
+
+Nada de lo que vuelve de Codex se da por bueno sin que yo lo revise. En cada pase cuento qué le pedí y qué volvió.
+
+Si Codex falla dos veces en la misma tarea, esa tarea vuelve a mí. No hay tercer intento.
