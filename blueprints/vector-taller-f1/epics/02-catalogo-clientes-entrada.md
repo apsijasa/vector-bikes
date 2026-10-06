@@ -70,7 +70,7 @@ src/server/auth/** · audit.ts · TallerLayout.astro · e2e/fixtures.ts · e2e/g
 | Export | Signature | Used by |
 |---|---|---|
 | `rules.ts` constantes | ver E2-T1 | 03–05 |
-| `catalog.ts` → `priceFor` | `(db, serviceId, bikeType) => Promise<number \| null>` | 03 |
+| `catalog.ts` → `priceFor` | `(db, actor, serviceId, bikeType) => Promise<number \| null>` (filtra por `actor.branchId`; servicio de otra sucursal → `null`) | 03 |
 | `rut.ts` → `normalizeRut`, `formatRut` | `(raw: string) => string \| null`; `(normalized) => string` | 03 |
 | `customers.ts` → `createCustomer`, `insertCustomer`, `findCustomerByPhone`, `customerFormSchema` | `createCustomer(db, actor, input, now, opts?)` (exige `customers.manage`); `insertCustomer(db, branchId, input, now, opts?)` (sin permiso; lo usa `startReception`) → `{ ok: true, customer } \| { ok: false, code: "duplicate", existing }` | E2-T7, 05 |
 | `bikes.ts` → `createBike`, `insertBike`, `listBikesOfCustomer`, `bikeFormSchema` | igual patrón que clientes | E2-T7, 05 |
