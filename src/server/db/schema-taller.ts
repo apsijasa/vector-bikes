@@ -80,4 +80,31 @@ export const servicePrices = pgTable(
   ],
 );
 
-export const tallerTables = [auditLog, services, servicePrices] as const;
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    rut: text("rut"),
+    phoneE164: text("phone_e164").notNull(),
+    email: text("email"),
+    discoveryChannel: text("discovery_channel"),
+    notes: text("notes"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_customers_rut").on(t.rut).where(sql`rut is not null`),
+    index("idx_customers_branch_phone").on(t.branchId, t.phoneE164),
+    index("idx_customers_branch_name").on(t.branchId, t.name),
+    check(
+      "customers_discovery_channel_check",
+      sql`discovery_channel is null or discovery_channel in ('instagram', 'google', 'recomendacion', 'sitio_web', 'paso_por_el_taller', 'otro')`,
+    ),
+  ],
+);
+
+export const tallerTables = [auditLog, services, servicePrices, customers] as const;

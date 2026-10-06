@@ -43,6 +43,13 @@
       "when": 1791247997901,
       "tag": "0005_freezing_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791249474063,
+      "tag": "0006_pale_echo",
+      "breakpoints": true
     }
   ]
 }
