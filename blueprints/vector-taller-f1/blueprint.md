@@ -535,7 +535,7 @@ git tag -l f1-05 | grep -qx f1-05   # expect: exit 0
 
 #### F1-06 — Área `/taller` y arnés de tablet (E1-T6)
 **Archivos:** `src/layouts/TallerLayout.astro` · `src/pages/taller/index.astro` · `e2e/login.spec.ts` · `package.json` · `.env.example`
-**Hacer:** `pnpm pkg set scripts.test:tablet="playwright test"` y `pnpm pkg set scripts.gate="pnpm check && pnpm test && pnpm build && pnpm test:build && pnpm test:tablet && pnpm smoke"`; `E2E_DATABASE_URL` en `.env.example` (el literal de abajo no cambia; en `.env` local usa el mismo rol que `DATABASE_URL`, §10); layout con nav filtrada y estilos del área; `/taller` con h1 "Taller" y "Hola, <nombre> · <rol>"; primer spec.
+**Hacer:** `pnpm pkg set 'scripts["test:tablet"]=playwright test'` y `pnpm pkg set scripts.gate="pnpm check && pnpm test && pnpm build && pnpm test:build && pnpm test:tablet && pnpm smoke"`; `E2E_DATABASE_URL` en `.env.example` (el literal de abajo no cambia; en `.env` local usa el mismo rol que `DATABASE_URL`, §10); layout con nav filtrada y estilos del área; `/taller` con h1 "Taller" y "Hola, <nombre> · <rol>"; primer spec.
 **Done when**
 - [ ] WHEN se pide `/taller` sin sesión THE SYSTEM SHALL redirigir a `/admin/login?next=%2Ftaller`
 - [ ] WHEN el dueño inicia sesión con toques en el viewport de tablet THE SYSTEM SHALL llevarlo a `/taller` con el `h1` `Taller` y el texto exacto `Dueño` visible

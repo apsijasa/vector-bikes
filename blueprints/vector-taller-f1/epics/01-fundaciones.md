@@ -347,7 +347,7 @@ git tag -l f1-05 | grep -qx f1-05   # expect: exit 0
 
 1. Scripts (las únicas ediciones de `package.json` de la fase, además del Bootstrap):
    ```bash
-   pnpm pkg set scripts.test:tablet="playwright test"
+   pnpm pkg set 'scripts["test:tablet"]=playwright test'   # corchetes: con la forma scripts.test:tablet, pnpm 12.4.2 falla con ERR_PNPM_PKG_INVALID_PROPERTY_PATH
    pnpm pkg set scripts.gate="pnpm check && pnpm test && pnpm build && pnpm test:build && pnpm test:tablet && pnpm smoke"
    ```
 2. `.env.example`, al final:
