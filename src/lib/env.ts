@@ -31,6 +31,24 @@ const hashSchema = z.object({ SESSION_SECRET: secret });
 const tasksSchema = z.object({ TASKS_SECRET: secret });
 const cronSchema = z.object({ CRON_SECRET: z.string().optional() });
 const siteSchema = z.object({ PUBLIC_SITE_URL: z.url() });
+const absentIfEmpty = (value: unknown) => (value === "" ? undefined : value);
+const storageSchema = z
+  .object({
+    STORAGE_DRIVER: z.preprocess(absentIfEmpty, z.enum(["local", "replit"]).default("local")),
+    STORAGE_LOCAL_DIR: z.preprocess(absentIfEmpty, z.string().default(".storage")),
+    STORAGE_BUCKET_ID: z.preprocess(absentIfEmpty, z.string().optional()),
+    REPLIT_DEPLOYMENT: z.preprocess(absentIfEmpty, z.string().optional()),
+  })
+  .superRefine((value, ctx) => {
+    if (value.REPLIT_DEPLOYMENT !== undefined && value.STORAGE_DRIVER !== "replit") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STORAGE_DRIVER"],
+        message: "debe ser replit en un despliegue de Replit",
+      });
+    }
+  });
+type StorageEnv = Omit<z.infer<typeof storageSchema>, "REPLIT_DEPLOYMENT">;
 const emailSchema = z
   .object({
     EMAIL_TRANSPORT: z.enum(["resend", "console"]),
@@ -142,4 +160,13 @@ export function getTasksEnv(source: EnvSource = process.env) {
 
 export function getCronEnv(source: EnvSource = process.env) {
   return parseSource(cronSchema, source);
+}
+
+export function getStorageEnv(source: EnvSource = process.env): StorageEnv {
+  const parsed = parseSource(storageSchema, source);
+  return {
+    STORAGE_DRIVER: parsed.STORAGE_DRIVER,
+    STORAGE_LOCAL_DIR: parsed.STORAGE_LOCAL_DIR,
+    STORAGE_BUCKET_ID: parsed.STORAGE_BUCKET_ID,
+  };
 }

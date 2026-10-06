@@ -191,7 +191,7 @@
     ],
     "checkpoint": "f1-08",
     "files": ["src/server/storage/storage.ts", "src/server/storage/images.ts", "src/lib/env.ts", ".env.example", "tests/integration/storage.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T1",
