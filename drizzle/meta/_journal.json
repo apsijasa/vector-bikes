@@ -36,6 +36,13 @@
       "when": 1791245576925,
       "tag": "0004_flowery_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791247997901,
+      "tag": "0005_freezing_anita_blake",
+      "breakpoints": true
     }
   ]
 }
