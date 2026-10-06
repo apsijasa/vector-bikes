@@ -166,7 +166,7 @@
     ],
     "checkpoint": "f1-07",
     "files": ["src/server/db/schema-taller.ts", "src/server/taller/audit.ts", "src/server/taller/users.ts", "src/pages/taller/usuarios.astro", "tests/integration/users-admin.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T8",
