@@ -168,9 +168,16 @@ async function seedOrders(sql: Sql): Promise<void> {
 export default async function globalSetup(): Promise<void> {
   rmSync(E2E_STORAGE_DIR, { recursive: true, force: true });
   await ensureDatabase(E2E_DATABASE_URL);
+  // drizzle() reemplaza los serializadores de fecha del cliente que recibe: migrar con uno propio
+  // deja el de la siembra con los de postgres-js, que aceptan Date.
+  const migrator = postgres(E2E_DATABASE_URL, { max: 1 });
+  try {
+    await migrate(drizzle({ client: migrator }), { migrationsFolder: "drizzle" });
+  } finally {
+    await migrator.end();
+  }
   const sql = postgres(E2E_DATABASE_URL, { max: 1 });
   try {
-    await migrate(drizzle({ client: sql }), { migrationsFolder: "drizzle" });
     await truncateAll(sql);
     if (await seedUsers(sql)) {
       await seedBookings(sql);
