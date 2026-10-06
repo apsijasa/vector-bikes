@@ -1,0 +1,20 @@
+---
+import TallerLayout from "../../layouts/TallerLayout.astro";
+import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../server/auth/admin-auth.ts";
+import { can, forbiddenResponse, ROLE_LABELS } from "../../server/auth/permissions.ts";
+import { getDb } from "../../server/db/client.ts";
+
+export const prerender = false;
+
+const user = await requireAdmin(getDb(), Astro.cookies.get(SESSION_COOKIE)?.value, new Date());
+if (!user) return Astro.redirect(loginRedirect(Astro.url.pathname + Astro.url.search), 303);
+if (!can(user.role, "orders.edit")) return forbiddenResponse();
+
+Astro.response.headers.set("cache-control", "no-store");
+const { name, role } = user;
+---
+
+<TallerLayout title="Taller — Vector Bikes" description="Área interna del taller." path="/taller" user={user}>
+  <h1>Taller</h1>
+  <p>Hola, {name} · {ROLE_LABELS[role]}</p>
+</TallerLayout>

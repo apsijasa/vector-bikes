@@ -143,7 +143,7 @@
     ],
     "checkpoint": "f1-06",
     "files": ["src/layouts/TallerLayout.astro", "src/pages/taller/index.astro", "e2e/login.spec.ts", "package.json", ".env.example"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T7",
