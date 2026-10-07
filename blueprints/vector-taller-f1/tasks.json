@@ -505,7 +505,7 @@
     ],
     "checkpoint": "f1-22",
     "files": ["src/server/taller/status.ts", "src/pages/taller/ordenes/index.astro", "src/pages/taller/ordenes/[id]/index.astro", "tests/integration/order-status.test.ts", "e2e/orden-mecanico.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T7",

@@ -35,8 +35,21 @@ export type AuditAction =
   | "report.generated";
 
 const sensitiveKey = /email|correo|phone|telefono|rut|token|password|clave/i;
+const uuidPattern = /\b[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}\b/i;
+const emailPattern = /[\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+/;
+const rutPattern = /(?<![\w.])(?:\d{7,8}|\d{1,2}(?:\.\d{3}){2})-[\dk](?!\w)/i;
+const phonePattern = /(?<![\w+.-])(?:\+?56[ .-]*)?9(?:[ .-]*\d){8}(?!\w|[.-]\d)/;
+const sensitiveContent = new RegExp(
+  `${emailPattern.source}|(${uuidPattern.source})|${rutPattern.source}|${phonePattern.source}`,
+  "gi",
+);
 
 export function redactDetails(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replace(sensitiveContent, (match, uuid: string | undefined) =>
+      uuid ? match : "[redactado]",
+    );
+  }
   if (Array.isArray(value)) return value.map(redactDetails);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(

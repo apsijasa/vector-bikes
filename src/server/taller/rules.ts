@@ -53,6 +53,11 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   trabajo_rechazado: "Trabajo rechazado",
 };
 export const TERMINAL_STATUSES = ["entregada", "cancelada", "trabajo_rechazado"] as const;
+export const MECHANIC_UNASSIGNED_ACCESS_STATUSES = [
+  "reservada",
+  "recibida",
+  "diagnostico",
+] as const;
 export const LOAD_EXCLUDED_STATUSES = ["lista_para_retirar", ...TERMINAL_STATUSES] as const;
 export const ORDER_TRANSITIONS = {
   reservada: ["recibida", "cancelada"],

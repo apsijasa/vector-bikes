@@ -1,0 +1,192 @@
+---
+import { z } from "zod";
+import TallerLayout from "../../../../layouts/TallerLayout.astro";
+import { formatClp } from "../../../../server/email/templates.ts";
+import { isAllowedOrigin } from "../../../../server/api/handlers.ts";
+import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../../server/auth/admin-auth.ts";
+import { can, forbiddenResponse } from "../../../../server/auth/permissions.ts";
+import type { Action } from "../../../../server/auth/permissions.ts";
+import { getDb } from "../../../../server/db/client.ts";
+import { formatOrderNumber } from "../../../../server/taller/orders.ts";
+import {
+  BIKE_TYPE_LABELS,
+  MANUAL_TRANSITIONS,
+  STATUS_LABELS,
+} from "../../../../server/taller/rules.ts";
+import type { BikeType, OrderStatus } from "../../../../server/taller/rules.ts";
+import {
+  assignMechanic,
+  changeOrderStatus,
+  listMechanics,
+  mechanicAssignmentSchema,
+  orderDetail,
+  orderNotesSchema,
+  statusChangeSchema,
+  takeOrder,
+  updateOrderNotes,
+} from "../../../../server/taller/status.ts";
+
+export const prerender = false;
+const db = getDb();
+const now = new Date();
+const user = await requireAdmin(db, Astro.cookies.get(SESSION_COOKIE)?.value, now);
+if (!user)
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: loginRedirect(Astro.url.pathname + Astro.url.search),
+      "cache-control": "no-store",
+    },
+  });
+if (Astro.request.method === "POST" && !isAllowedOrigin(Astro.request)) return forbiddenResponse();
+if (!can(user.role, "orders.edit")) return forbiddenResponse();
+Astro.response.headers.set("cache-control", "no-store");
+const id = z.uuid().safeParse(Astro.params.id);
+if (!id.success)
+  return new Response("Orden no encontrada.", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
+const PATH = `/taller/ordenes/${id.data}`;
+const actionSchema = z.enum(["status", "assign", "take", "notes"]);
+const noteFields = [
+  { key: "diagnosis", label: "Diagnóstico" },
+  { key: "observations", label: "Observaciones" },
+  { key: "notes", label: "Notas" },
+] as const;
+let error = "";
+const fieldErrors: Record<string, string> = {};
+let values: Record<string, string> = {};
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const action = form.get("action");
+  const to = form.get("to");
+  const permission: Action =
+    action === "assign"
+      ? "orders.assign"
+      : action === "status" && (to === "cancelada" || to === "trabajo_rechazado")
+        ? "orders.cancel"
+        : "orders.edit";
+  if (!can(user.role, permission) || (action === "take" && user.role !== "mechanic"))
+    return forbiddenResponse();
+  const parsedAction = actionSchema.safeParse(action);
+  values = Object.fromEntries([...form].map(([key, value]) => [key, String(value)]));
+  let result: { ok: boolean; code?: string } = { ok: false, code: "validation_error" };
+  if (parsedAction.success && parsedAction.data === "status") {
+    const parsed = statusChangeSchema.safeParse({ to, note: form.get("note") || null });
+    if (parsed.success)
+      result = await changeOrderStatus(db, user, id.data, parsed.data.to, parsed.data.note, now);
+    else fieldErrors.note = "La nota debe tener hasta 2000 caracteres.";
+  } else if (parsedAction.success && parsedAction.data === "assign") {
+    const parsed = mechanicAssignmentSchema.safeParse({
+      mechanicId: form.get("mechanicId") || null,
+    });
+    if (parsed.success)
+      result = await assignMechanic(db, user, id.data, parsed.data.mechanicId, now);
+    else fieldErrors.mechanicId = "Selecciona un mecánico válido.";
+  } else if (parsedAction.success && parsedAction.data === "take") {
+    result = await takeOrder(db, user, id.data, now);
+  } else if (parsedAction.success && parsedAction.data === "notes") {
+    const parsed = orderNotesSchema.safeParse(
+      Object.fromEntries(noteFields.map(({ key }) => [key, form.get(key) || null])),
+    );
+    if (parsed.success) result = await updateOrderNotes(db, user, id.data, parsed.data, now);
+    else
+      for (const issue of parsed.error.issues)
+        fieldErrors[String(issue.path[0])] = "Este campo debe tener hasta 2000 caracteres.";
+  }
+  if (result.ok)
+    return new Response(null, {
+      status: 303,
+      headers: { location: `${PATH}?hecho=guardado`, "cache-control": "no-store" },
+    });
+  if (result.code === "forbidden") return forbiddenResponse();
+  Astro.response.status =
+    result.code === "not_found" ? 404 : result.code === "validation_error" ? 422 : 409;
+  error =
+    result.code === "not_found"
+      ? "Orden no encontrada."
+      : result.code === "validation_error"
+        ? "Revisa los datos del formulario."
+        : "La orden cambió o esta acción no está disponible. Revisa su estado.";
+}
+const detail = await orderDetail(db, user, id.data);
+if (!detail.ok) {
+  if (detail.code === "forbidden") return forbiddenResponse();
+  return new Response("Orden no encontrada.", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
+}
+const { order, customer, bike, history, warrantyOfNumber, mechanicName } = detail;
+const number = formatOrderNumber(order.number);
+const targets = (MANUAL_TRANSITIONS[order.status as OrderStatus] as readonly OrderStatus[]).filter(
+  (target) =>
+    can(
+      user.role,
+      target === "cancelada" || target === "trabajo_rechazado" ? "orders.cancel" : "orders.edit",
+    ),
+);
+const mechanics = await listMechanics(db, user);
+const canTake =
+  user.role === "mechanic" &&
+  order.assignedMechanicId === null &&
+  (order.status === "recibida" || order.status === "diagnostico");
+const navigation: { suffix: string; label: string; permission: Action }[] = [
+  { suffix: "recepcion", label: "Recepción", permission: "reception.perform" },
+  { suffix: "cierre", label: "Fotos y firma", permission: "reception.perform" },
+  { suffix: "lineas", label: "Líneas", permission: "orders.edit" },
+  { suffix: "galeria", label: "Galería", permission: "photos.upload" },
+  { suffix: "adicional", label: "Adicional", permission: "approvals.create" },
+  { suffix: "control", label: "Control de calidad", permission: "orders.edit" },
+  { suffix: "entrega", label: "Entrega", permission: "delivery.complete" },
+  { suffix: "componentes", label: "Componentes", permission: "components.manage" },
+  { suffix: "informe", label: "Informe", permission: "reports.generate" },
+  { suffix: "etiqueta", label: "Etiqueta", permission: "orders.edit" },
+];
+---
+
+<TallerLayout title={`${number} — Vector Bikes`} description="Detalle e historial de la orden de trabajo." path="/taller/ordenes" user={user}>
+  <h1>{number}</h1>
+  <span class={`status status--${order.status}`}>{STATUS_LABELS[order.status as OrderStatus]}</span>
+  {Astro.url.searchParams.get("hecho") === "guardado" && <p role="status">Cambios guardados.</p>}
+  {error && <p role="alert">{error}</p>}
+  <h2>Cliente</h2><p>{customer.name}</p>
+  {can(user.role, "customers.manage") && <dl><dt>Teléfono</dt><dd>{customer.phoneE164}</dd><dt>Correo</dt><dd>{customer.email ?? "Sin correo"}</dd><dt>RUT</dt><dd>{customer.rut ?? "Sin RUT"}</dd></dl>}
+  <h2>Bicicleta</h2><p>{bike.brand} {bike.model} · {BIKE_TYPE_LABELS[bike.bikeType as BikeType]}</p>
+  <p>Servicio solicitado: {order.requestedService}</p>
+  <p>Entrega estimada: {order.estimatedDeliveryDate ?? "Sin fecha"}</p>
+  <p>Total para el cliente: {formatClp(order.totalClp)}</p>
+  {warrantyOfNumber !== null && <p>Garantía de {formatOrderNumber(warrantyOfNumber)}</p>}
+  <nav aria-label="Acciones de la orden">
+    {navigation.filter((link) => can(user.role, link.permission)).map((link) => <a class="btn ghost" href={`${PATH}/${link.suffix}`}>{link.label}</a>)}
+  </nav>
+  {targets.length > 0 && <section aria-labelledby="status-title">
+    <h2 id="status-title">Cambiar estado</h2>
+    <form method="post" action={PATH}>
+      <input type="hidden" name="action" value="status" />
+      <div class="field"><label for="note">Nota del cambio (opcional)</label><textarea id="note" name="note" rows="2" maxlength="2000" aria-invalid={Boolean(fieldErrors.note)} aria-describedby={fieldErrors.note ? "note-error" : undefined}>{values.note ?? ""}</textarea>{fieldErrors.note && <p id="note-error">{fieldErrors.note}</p>}</div>
+      <div class="options">{targets.map((target) => <button class="btn" type="submit" name="to" value={target}>Pasar a {STATUS_LABELS[target]}</button>)}</div>
+    </form>
+  </section>}
+  <section aria-labelledby="assignment-title">
+    <h2 id="assignment-title">Mecánico asignado</h2><p>{mechanicName ?? "Sin asignar"}</p>
+    {can(user.role, "orders.assign") && <form method="post" action={PATH}>
+      <input type="hidden" name="action" value="assign" />
+      <div class="field"><label for="mechanicId">Mecánico</label><select id="mechanicId" name="mechanicId" aria-invalid={Boolean(fieldErrors.mechanicId)} aria-describedby={fieldErrors.mechanicId ? "mechanicId-error" : undefined}><option value="">Sin asignar</option>{mechanics.map((mechanic) => <option value={mechanic.id} selected={mechanic.id === order.assignedMechanicId}>{mechanic.name}</option>)}</select>{fieldErrors.mechanicId && <p id="mechanicId-error">{fieldErrors.mechanicId}</p>}</div>
+      <button class="btn" type="submit">Guardar asignación</button>
+    </form>}
+    {canTake && <form method="post" action={PATH}><input type="hidden" name="action" value="take" /><button class="btn" type="submit">Tomar orden</button></form>}
+  </section>
+  <form method="post" action={PATH}>
+    <input type="hidden" name="action" value="notes" />
+    <fieldset><legend>Información de la orden</legend><div class="fields">
+      {noteFields.map(({ key, label }) => <div class="field"><label for={key}>{label}</label><textarea id={key} name={key} rows="3" maxlength="2000" aria-invalid={Boolean(fieldErrors[key])} aria-describedby={fieldErrors[key] ? `${key}-error` : undefined}>{values.action === "notes" ? values[key] ?? "" : order[key] ?? ""}</textarea>{fieldErrors[key] && <p id={`${key}-error`}>{fieldErrors[key]}</p>}</div>)}
+    </div><button class="btn" type="submit">Guardar información</button></fieldset>
+  </form>
+  <h2>Historial</h2>
+  <div style="overflow-x:auto"><table class="dense">
+    <caption>Cambios de estado</caption><thead><tr><th scope="col">Fecha</th><th scope="col">Desde</th><th scope="col">Hasta</th><th scope="col">Autor</th><th scope="col">Nota</th></tr></thead>
+    <tbody>{history.map(({ history: entry, authorName }) => <tr><td>{entry.createdAt.toLocaleString("es-CL", { timeZone: "America/Santiago" })}</td><td>{entry.fromStatus ? STATUS_LABELS[entry.fromStatus as OrderStatus] : "Creación"}</td><td>{STATUS_LABELS[entry.toStatus as OrderStatus]}</td><td>{authorName ?? "Sistema"}</td><td>{entry.note ?? "Sin nota"}</td></tr>)}</tbody>
+  </table></div>
+</TallerLayout>
