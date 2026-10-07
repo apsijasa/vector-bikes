@@ -255,7 +255,7 @@
     ],
     "checkpoint": "f1-11",
     "files": ["src/pages/taller/clientes/index.astro", "src/pages/taller/clientes/nuevo.astro", "src/pages/taller/clientes/[id].astro", "e2e/clientes.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T4",
