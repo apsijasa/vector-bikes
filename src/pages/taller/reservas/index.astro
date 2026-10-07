@@ -1,0 +1,57 @@
+---
+import { DateTime } from "luxon";
+import TallerLayout from "../../../layouts/TallerLayout.astro";
+import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../server/auth/admin-auth.ts";
+import { can, forbiddenResponse } from "../../../server/auth/permissions.ts";
+import { TIMEZONE } from "../../../server/booking/rules.ts";
+import { localToday } from "../../../server/booking/slots.ts";
+import { getDb } from "../../../server/db/client.ts";
+import { listUpcomingBookings } from "../../../server/taller/manual-booking.ts";
+
+export const prerender = false;
+const PATH = "/taller/reservas";
+const db = getDb();
+const now = new Date();
+const user = await requireAdmin(db, Astro.cookies.get(SESSION_COOKIE)?.value, now);
+if (!user)
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: loginRedirect(Astro.url.pathname + Astro.url.search),
+      "cache-control": "no-store",
+    },
+  });
+if (!can(user.role, "bookings.manage")) return forbiddenResponse();
+Astro.response.headers.set("cache-control", "no-store");
+const upcoming = await listUpcomingBookings(db, localToday(now));
+const sourceLabels: Record<string, string> = {
+  web: "Sitio",
+  telefono: "Teléfono",
+  whatsapp: "WhatsApp",
+  presencial: "Presencial",
+};
+---
+
+<TallerLayout title="Reservas — Vector Bikes" description="Reservas próximas del taller." path={PATH} user={user}>
+  <h1>Reservas</h1>
+  {Astro.url.searchParams.get("hecho") === "creada" && <p role="status">Reserva creada.</p>}
+  <p><a class="btn" href={`${PATH}/nueva`}>Nueva reserva</a></p>
+  <div style="overflow-x:auto">
+    <table class="dense">
+      <caption>Reservas próximas · 14 días</caption>
+      <thead><tr><th scope="col">Día</th><th scope="col">Hora</th><th scope="col">Nombre</th><th scope="col">Teléfono</th><th scope="col">Bicicleta</th><th scope="col">Origen</th><th scope="col">Recepción</th></tr></thead>
+      <tbody>
+        {upcoming.map((booking) => (
+          <tr>
+            <td>{DateTime.fromISO(booking.serviceDate).toFormat("dd/MM/yyyy")}</td>
+            <td>{DateTime.fromJSDate(booking.startsAt).setZone(TIMEZONE).toFormat("HH:mm")}</td>
+            <th scope="row">{booking.customerName}</th>
+            <td>{booking.phoneE164}</td><td>{booking.bike}</td><td>{sourceLabels[booking.source]}</td>
+            <td><a class="btn ghost" href={`/taller/recepcion/nueva?reserva=${booking.id}`}>Recibir</a></td>
+          </tr>
+        ))}
+        {upcoming.length === 0 && <tr><td colspan="7">No hay reservas próximas.</td></tr>}
+      </tbody>
+    </table>
+  </div>
+</TallerLayout>

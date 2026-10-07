@@ -12,6 +12,8 @@ import type { BookingMode } from "./rules.ts";
 import { checkStart } from "./slots.ts";
 import { hashCancelToken, newCancelToken } from "./tokens.ts";
 
+export type BookingSource = "web" | "telefono" | "whatsapp" | "presencial";
+
 export type CreateBookingInput = {
   mode: BookingMode;
   serviceDate: string;
@@ -25,6 +27,7 @@ export type CreateBookingInput = {
   address: string | null;
   ipHash: string | null;
   whatsappConsent?: boolean;
+  source?: BookingSource;
 };
 
 export type CreateBookingResult =
@@ -83,6 +86,7 @@ async function insertBooking(
       serviceDate: input.serviceDate,
       mode: input.mode,
       status: "confirmed",
+      source: input.source ?? "web",
       startsAt: slot.startsAt,
       endsAt: slot.endsAt,
       customerName: input.customerName,

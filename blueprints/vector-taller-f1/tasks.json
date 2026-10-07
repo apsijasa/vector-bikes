@@ -320,7 +320,7 @@
     ],
     "checkpoint": "f1-14",
     "files": ["src/server/booking/create-booking.ts", "src/server/taller/manual-booking.ts", "src/pages/taller/reservas/index.astro", "src/pages/taller/reservas/nueva.astro", "tests/integration/manual-booking.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T7",
