@@ -1,0 +1,51 @@
+---
+import { z } from "zod";
+import TallerLayout from "../../../../layouts/TallerLayout.astro";
+import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../../server/auth/admin-auth.ts";
+import { can, forbiddenResponse } from "../../../../server/auth/permissions.ts";
+import { getDb } from "../../../../server/db/client.ts";
+import { formatOrderNumber, getOrderHeader } from "../../../../server/taller/orders.ts";
+import { BIKE_TYPE_LABELS, STATUS_LABELS } from "../../../../server/taller/rules.ts";
+import type { BikeType, OrderStatus } from "../../../../server/taller/rules.ts";
+
+export const prerender = false;
+const db = getDb();
+const user = await requireAdmin(db, Astro.cookies.get(SESSION_COOKIE)?.value, new Date());
+if (!user)
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: loginRedirect(Astro.url.pathname + Astro.url.search),
+      "cache-control": "no-store",
+    },
+  });
+if (!can(user.role, "reception.perform")) return forbiddenResponse();
+Astro.response.headers.set("cache-control", "no-store");
+const id = z.uuid().safeParse(Astro.params.id);
+const header = id.success ? await getOrderHeader(db, user, id.data) : null;
+if (!header)
+  return new Response("Orden no encontrada.", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
+const { order, customer, bike } = header;
+const number = formatOrderNumber(order.number);
+---
+
+<TallerLayout title={`${number} · Recepción — Vector Bikes`} description="Recepción de la bicicleta y datos de la orden." path="/taller/recepcion/nueva" user={user}>
+  <header>
+    <h1>{number}</h1>
+    <span class={`status status--${order.status}`}>{STATUS_LABELS[order.status as OrderStatus]}</span>
+    <h2>Cliente</h2>
+    <p>{customer.name}</p>
+    <h2>Bicicleta</h2>
+    <p>{bike.brand} {bike.model} · {BIKE_TYPE_LABELS[bike.bikeType as BikeType]}</p>
+    <h2>Servicio solicitado</h2>
+    <p>{order.requestedService}</p>
+  </header>
+  <!-- F1-17..F1-21: agregar aquí checklist, fotos, diagnóstico, firma y cierre de recepción. -->
+  <section id="reception-sections" aria-label="Recepción">
+    <h2>Recepción</h2>
+    <p>Orden creada. La recepción está pendiente.</p>
+  </section>
+</TallerLayout>

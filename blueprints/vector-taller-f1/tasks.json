@@ -364,7 +364,7 @@
     ],
     "checkpoint": "f1-16",
     "files": ["src/pages/taller/recepcion/nueva.astro", "src/pages/taller/ordenes/[id]/recepcion.astro", "src/server/taller/manual-booking.ts", "src/pages/taller/reservas/index.astro", "e2e/recepcion-inicio.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T1",

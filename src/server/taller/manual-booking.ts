@@ -1,4 +1,4 @@
-import { and, asc, between, inArray } from "drizzle-orm";
+import { and, asc, between, eq, getTableColumns, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { log } from "../../lib/log.ts";
 import { normalizePhone } from "../api/handlers.ts";
@@ -9,6 +9,7 @@ import { createBooking } from "../booking/create-booking.ts";
 import type { BookingMode } from "../booking/rules.ts";
 import { addDays, computeDay } from "../booking/slots.ts";
 import type { AppDb } from "../db/client.ts";
+import { workOrders } from "../db/schema-orders.ts";
 import { bookings } from "../db/schema.ts";
 import { notifyBookingCreated } from "../email/notifications.ts";
 
@@ -122,8 +123,13 @@ export async function createManualBooking(
 // bookings es la agenda única de la sucursal; no tiene branch_id.
 export function listUpcomingBookings(db: AppDb, today: string, days = 14) {
   return db
-    .select()
+    .select({
+      ...getTableColumns(bookings),
+      orderId: workOrders.id,
+      orderNumber: workOrders.number,
+    })
     .from(bookings)
+    .leftJoin(workOrders, eq(workOrders.bookingId, bookings.id))
     .where(
       and(
         between(bookings.serviceDate, today, addDays(today, days - 1)),

@@ -46,7 +46,7 @@ const canManageCustomers = can(user.role, "customers.manage");
         {results.customers.map((customer) => (
           <tr>
             <th scope="row">
-              {canManageCustomers ? <a href={`/taller/clientes/${customer.id}`}>{customer.name}</a> : customer.name}
+              <a href={canManageCustomers ? `/taller/clientes/${customer.id}` : `/taller/recepcion/nueva?cliente=${customer.id}`}>{customer.name}</a>
             </th>
           </tr>
         ))}

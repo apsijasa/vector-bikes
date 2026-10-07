@@ -7,6 +7,7 @@ import { TIMEZONE } from "../../../server/booking/rules.ts";
 import { localToday } from "../../../server/booking/slots.ts";
 import { getDb } from "../../../server/db/client.ts";
 import { listUpcomingBookings } from "../../../server/taller/manual-booking.ts";
+import { formatOrderNumber } from "../../../server/taller/orders.ts";
 
 export const prerender = false;
 const PATH = "/taller/reservas";
@@ -47,7 +48,13 @@ const sourceLabels: Record<string, string> = {
             <td>{DateTime.fromJSDate(booking.startsAt).setZone(TIMEZONE).toFormat("HH:mm")}</td>
             <th scope="row">{booking.customerName}</th>
             <td>{booking.phoneE164}</td><td>{booking.bike}</td><td>{sourceLabels[booking.source]}</td>
-            <td><a class="btn ghost" href={`/taller/recepcion/nueva?reserva=${booking.id}`}>Recibir</a></td>
+            <td>
+              {booking.orderId && booking.orderNumber !== null ? (
+                <a class="btn ghost" href={`/taller/ordenes/${booking.orderId}/recepcion`}>{formatOrderNumber(booking.orderNumber)}</a>
+              ) : (
+                <a class="btn ghost" href={`/taller/recepcion/nueva?reserva=${booking.id}`}>Recibir</a>
+              )}
+            </td>
           </tr>
         ))}
         {upcoming.length === 0 && <tr><td colspan="7">No hay reservas próximas.</td></tr>}
