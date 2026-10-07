@@ -107,4 +107,35 @@ export const customers = pgTable(
   ],
 );
 
-export const tallerTables = [auditLog, services, servicePrices, customers] as const;
+export const bikes = pgTable(
+  "bikes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    brand: text("brand").notNull(),
+    model: text("model").notNull(),
+    year: integer("year"),
+    bikeType: text("bike_type").notNull(),
+    size: text("size"),
+    color: text("color"),
+    serialNumber: text("serial_number"),
+    kmNoted: integer("km_noted"),
+    notes: text("notes"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("idx_bikes_customer").on(t.customerId),
+    index("idx_bikes_branch_serial").on(t.branchId, t.serialNumber),
+    check("bikes_type_check", sql`bike_type in ('mtb', 'ruta', 'gravel', 'urbana', 'ebike')`),
+    check("bikes_year_check", sql`year is null or (year >= 1980 and year <= 2100)`),
+    check("bikes_km_noted_check", sql`km_noted is null or km_noted >= 0`),
+  ],
+);
+
+export const tallerTables = [auditLog, services, servicePrices, customers, bikes] as const;

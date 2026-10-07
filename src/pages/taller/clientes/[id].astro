@@ -5,13 +5,19 @@ import { isAllowedOrigin } from "../../../server/api/handlers.ts";
 import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../server/auth/admin-auth.ts";
 import { can, forbiddenResponse } from "../../../server/auth/permissions.ts";
 import { getDb } from "../../../server/db/client.ts";
+import { bikeFormSchema, createBike, listBikesOfCustomer } from "../../../server/taller/bikes.ts";
 import {
   customerFormSchema,
   findDuplicates,
   getCustomer,
   updateCustomer,
 } from "../../../server/taller/customers.ts";
-import { DISCOVERY_CHANNELS, DISCOVERY_CHANNEL_LABELS } from "../../../server/taller/rules.ts";
+import {
+  BIKE_TYPES,
+  BIKE_TYPE_LABELS,
+  DISCOVERY_CHANNELS,
+  DISCOVERY_CHANNEL_LABELS,
+} from "../../../server/taller/rules.ts";
 
 export const prerender = false;
 const db = getDb();
@@ -44,7 +50,27 @@ if (!customer)
     status: 404,
     headers: { "cache-control": "no-store" },
   });
-const formSchema = customerFormSchema.extend({ allow_phone_duplicate: z.literal("1").optional() });
+const formSchema = z.discriminatedUnion("accion", [
+  customerFormSchema.extend({
+    accion: z.literal("editar"),
+    allow_phone_duplicate: z.literal("1").optional(),
+  }),
+  bikeFormSchema.extend({ accion: z.literal("bicicleta") }),
+]);
+const bikeFields = [
+  { key: "brand", label: "Marca", maxlength: 60, required: true },
+  { key: "model", label: "Modelo", maxlength: 80, required: true },
+  { key: "size", label: "Talla", maxlength: 20, required: false },
+  { key: "color", label: "Color", maxlength: 40, required: false },
+  { key: "serialNumber", label: "Número de serie", maxlength: 80, required: false },
+];
+const bikeNumbers = [
+  { key: "year", label: "Año", min: 1980, max: 2100 },
+  { key: "kmNoted", label: "Kilometraje anotado", min: 0, max: 2147483647 },
+];
+let bikeValues: Record<string, string> = {};
+const bikeErrors: Record<string, string> = {};
+let bikeError = "";
 const fields: {
   key: string;
   label: string;
@@ -76,14 +102,29 @@ let canOverridePhone = false;
 
 if (Astro.request.method === "POST") {
   const form = await Astro.request.formData();
-  values = Object.fromEntries([...form].map(([key, value]) => [key, String(value)]));
-  const parsed = formSchema.safeParse(values);
+  const raw = Object.fromEntries([...form].map(([key, value]) => [key, String(value)]));
+  const isBikeAction = raw.accion === "bicicleta";
+  if (isBikeAction) bikeValues = raw;
+  else values = raw;
+  const parsed = formSchema.safeParse({ ...raw, accion: raw.accion ?? "editar" });
   if (!parsed.success) {
     Astro.response.status = 422;
-    error = "Revisa los datos del cliente.";
+    if (isBikeAction) bikeError = "Revisa los datos de la bicicleta.";
+    else error = "Revisa los datos del cliente.";
     for (const issue of parsed.error.issues) {
-      fieldErrors[String(issue.path[0])] = issue.message;
+      (isBikeAction ? bikeErrors : fieldErrors)[String(issue.path[0])] = issue.message;
     }
+  } else if (parsed.data.accion === "bicicleta") {
+    const result = await createBike(db, user, id.data, parsed.data, now);
+    if (result.ok)
+      return new Response(null, {
+        status: 303,
+        headers: { location: `${PATH}?hecho=bicicleta`, "cache-control": "no-store" },
+      });
+    if (result.code === "forbidden") return forbiddenResponse();
+    Astro.response.status = result.code === "not_found" ? 404 : 422;
+    bikeError =
+      result.code === "not_found" ? "Cliente no encontrado." : "Revisa los datos de la bicicleta.";
   } else {
     const result = await updateCustomer(db, user, id.data, parsed.data, now, {
       allowPhoneDuplicate: parsed.data.allow_phone_duplicate === "1",
@@ -119,7 +160,12 @@ if (Astro.request.method === "POST") {
     }
   }
 }
-const notice = Astro.url.searchParams.get("hecho") === "editar" ? "Cliente actualizado." : "";
+const notices: Record<string, string> = {
+  editar: "Cliente actualizado.",
+  bicicleta: "Bicicleta agregada.",
+};
+const notice = notices[Astro.url.searchParams.get("hecho") ?? ""];
+const customerBikes = await listBikesOfCustomer(db, user, id.data);
 ---
 
 <TallerLayout title={`${customer.name} — Vector Bikes`} description="Ficha y edición del cliente del taller." path="/taller/clientes" user={user}>
@@ -132,6 +178,7 @@ const notice = Astro.url.searchParams.get("hecho") === "editar" ? "Cliente actua
       {existing && <a href={`/taller/clientes/${existing.id}`}>Usar ficha existente</a>}
       {canOverridePhone && (
         <form method="post" action={PATH}>
+          <input type="hidden" name="accion" value="editar" />
           {valueKeys.map((key) => <input type="hidden" name={key} value={values[key] ?? ""} />)}
           <input type="hidden" name="allow_phone_duplicate" value="1" />
           <button type="submit" class="btn">Crear de todas formas</button>
@@ -140,6 +187,7 @@ const notice = Astro.url.searchParams.get("hecho") === "editar" ? "Cliente actua
     </div>
   )}
   <form method="post" action={PATH}>
+    <input type="hidden" name="accion" value="editar" />
     <div class="fields">
       {fields.map((field) => (
         <div class="field">
@@ -166,4 +214,48 @@ const notice = Astro.url.searchParams.get("hecho") === "editar" ? "Cliente actua
     </div>
     <button type="submit" class="btn">Guardar cliente</button>
   </form>
+  <section aria-labelledby="bikes-heading">
+    <h2 id="bikes-heading">Bicicletas</h2>
+    {customerBikes.length ? (
+      <ul>
+        {customerBikes.map((bike) => <li><a href={`/taller/bicicletas/${bike.id}`}>{bike.brand} {bike.model}</a></li>)}
+      </ul>
+    ) : <p>Este cliente todavía no tiene bicicletas registradas.</p>}
+    <h3>Agregar bicicleta</h3>
+    {bikeError && <p role="alert">{bikeError}</p>}
+    <form method="post" action={PATH}>
+      <input type="hidden" name="accion" value="bicicleta" />
+      <div class="fields">
+        {bikeFields.map((field) => (
+          <div class="field">
+            <label for={`bike-${field.key}`}>{field.label}</label>
+            <input id={`bike-${field.key}`} name={field.key} required={field.required} maxlength={field.maxlength} value={bikeValues[field.key] ?? ""} aria-invalid={Boolean(bikeErrors[field.key])} aria-describedby={bikeErrors[field.key] ? `bike-${field.key}-error` : undefined} />
+            {bikeErrors[field.key] && <p id={`bike-${field.key}-error`}>{bikeErrors[field.key]}</p>}
+          </div>
+        ))}
+        <fieldset>
+          <legend>Tipo de bicicleta</legend>
+          <div class="options">
+            {BIKE_TYPES.map((type) => (
+              <label for={`bike-type-${type}`}><input id={`bike-type-${type}`} type="radio" name="bikeType" value={type} required checked={bikeValues.bikeType === type} aria-invalid={Boolean(bikeErrors.bikeType)} aria-describedby={bikeErrors.bikeType ? "bike-type-error" : undefined} />{BIKE_TYPE_LABELS[type]}</label>
+            ))}
+          </div>
+          {bikeErrors.bikeType && <p id="bike-type-error">{bikeErrors.bikeType}</p>}
+        </fieldset>
+        {bikeNumbers.map((field) => (
+          <div class="field">
+            <label for={`bike-${field.key}`}>{field.label}</label>
+            <input id={`bike-${field.key}`} name={field.key} type="number" min={field.min} max={field.max} step="1" value={bikeValues[field.key] ?? ""} aria-invalid={Boolean(bikeErrors[field.key])} aria-describedby={bikeErrors[field.key] ? `bike-${field.key}-error` : undefined} />
+            {bikeErrors[field.key] && <p id={`bike-${field.key}-error`}>{bikeErrors[field.key]}</p>}
+          </div>
+        ))}
+        <div class="field">
+          <label for="bike-notes">Notas</label>
+          <textarea id="bike-notes" name="notes" maxlength="1000" rows="3" aria-invalid={Boolean(bikeErrors.notes)} aria-describedby={bikeErrors.notes ? "bike-notes-error" : undefined}>{bikeValues.notes ?? ""}</textarea>
+          {bikeErrors.notes && <p id="bike-notes-error">{bikeErrors.notes}</p>}
+        </div>
+      </div>
+      <button type="submit" class="btn">Agregar bicicleta</button>
+    </form>
+  </section>
 </TallerLayout>
