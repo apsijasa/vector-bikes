@@ -344,7 +344,7 @@
     ],
     "checkpoint": "f1-15",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/rules.ts", "src/server/taller/orders.ts", "tests/integration/work-orders.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T8",

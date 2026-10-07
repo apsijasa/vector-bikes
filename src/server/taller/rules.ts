@@ -87,6 +87,14 @@ export const MANUAL_TRANSITIONS = {
   trabajo_rechazado: [],
 } as const satisfies Record<OrderStatus, readonly OrderStatus[]>;
 
+export function isAllowedTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return (ORDER_TRANSITIONS[from] as readonly OrderStatus[]).includes(to);
+}
+
+export function isManualTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return (MANUAL_TRANSITIONS[from] as readonly OrderStatus[]).includes(to);
+}
+
 export const INTAKE_CHECK_KEYS = [
   "frenos",
   "cadena",

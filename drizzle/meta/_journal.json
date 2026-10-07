@@ -64,6 +64,13 @@
       "when": 1791380177168,
       "tag": "0008_hard_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791381817185,
+      "tag": "0009_curved_blue_shield",
+      "breakpoints": true
     }
   ]
 }
