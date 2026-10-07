@@ -188,7 +188,8 @@ const values: Record<string, string> = {
   </header>
   <section id="reception-sections" aria-label="Recepción">
     <h2>Recepción</h2>
-    <p>Orden creada. La recepción está pendiente.</p>
+    {order.status === "recibida" ? <p role="status">Recepción finalizada</p> : <p>Orden creada. La recepción está pendiente.</p>}
+    <a class="btn" href={`/taller/ordenes/${order.id}/cierre`}>Continuar a fotos y firma</a>
   </section>
   {error && <p role="alert">{error}</p>}
   {Astro.url.searchParams.get("hecho") === "checklist" && <p role="status">Checklist guardado.</p>}

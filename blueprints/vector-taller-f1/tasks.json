@@ -482,7 +482,7 @@
     ],
     "checkpoint": "f1-21",
     "files": ["src/components/taller/PhotoCapture.tsx", "src/components/taller/SignaturePad.tsx", "src/pages/taller/ordenes/[id]/cierre.astro", "src/pages/taller/ordenes/[id]/recepcion.astro", "e2e/recepcion-completa.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T6",
