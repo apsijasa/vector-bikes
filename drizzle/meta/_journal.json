@@ -78,6 +78,13 @@
       "when": 1791389589375,
       "tag": "0010_normal_speed_demon",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791398920501,
+      "tag": "0011_nappy_scourge",
+      "breakpoints": true
     }
   ]
 }

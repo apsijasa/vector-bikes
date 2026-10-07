@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { bikes, customers } from "./schema-taller.ts";
+import { bikes, customers, services } from "./schema-taller.ts";
 import { bookings, branches, createdAt, instant, updatedAt, users } from "./schema.ts";
 
 export const workOrders = pgTable(
@@ -161,10 +161,48 @@ export const intakeAccessories = pgTable(
   (t) => [index("idx_intake_accessories_order").on(t.workOrderId)],
 );
 
+export const workOrderItems = pgTable(
+  "work_order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    kind: text("kind").$type<"servicio" | "repuesto">().notNull(),
+    origin: text("origin").$type<"inicial" | "adicional">().notNull(),
+    serviceId: uuid("service_id").references(() => services.id, { onDelete: "restrict" }),
+    description: text("description").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    unitPriceClp: integer("unit_price_clp").notNull(),
+    estimatedMinutes: integer("estimated_minutes").notNull().default(0),
+    voidedAt: instant("voided_at"),
+    voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("idx_work_order_items_order").on(t.workOrderId),
+    check("work_order_items_kind_check", sql`kind in ('servicio', 'repuesto')`),
+    check("work_order_items_origin_check", sql`origin in ('inicial', 'adicional')`),
+    check("work_order_items_quantity_check", sql`quantity > 0`),
+    check(
+      "work_order_items_non_negative_check",
+      sql`unit_price_clp >= 0 and estimated_minutes >= 0`,
+    ),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
   intakeChecks,
   intakeAccessories,
+  workOrderItems,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;

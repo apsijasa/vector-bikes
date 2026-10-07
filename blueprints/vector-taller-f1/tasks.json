@@ -413,7 +413,7 @@
     ],
     "checkpoint": "f1-18",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/items.ts", "src/server/taller/delivery-date.ts", "src/pages/taller/ordenes/[id]/recepcion.astro", "tests/integration/items.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T3",

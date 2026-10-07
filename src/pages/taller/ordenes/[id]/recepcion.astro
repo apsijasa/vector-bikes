@@ -4,7 +4,17 @@ import TallerLayout from "../../../../layouts/TallerLayout.astro";
 import { isAllowedOrigin } from "../../../../server/api/handlers.ts";
 import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../../server/auth/admin-auth.ts";
 import { can, forbiddenResponse } from "../../../../server/auth/permissions.ts";
+import { addDays, localToday } from "../../../../server/booking/slots.ts";
 import { getDb } from "../../../../server/db/client.ts";
+import { formatClp } from "../../../../server/email/templates.ts";
+import { listCatalog } from "../../../../server/taller/catalog.ts";
+import {
+  confirmDeliveryDate,
+  deliveryDateSchema,
+  loadByDate,
+  suggestDeliveryDate,
+} from "../../../../server/taller/delivery-date.ts";
+import { addCatalogItem, catalogItemSchema, listItems } from "../../../../server/taller/items.ts";
 import {
   accessoryFormSchema,
   addAccessory,
@@ -48,11 +58,24 @@ if (!header)
     headers: { "cache-control": "no-store" },
   });
 const { order, customer, bike } = header;
+if (
+  user.role === "mechanic" &&
+  order.assignedMechanicId !== user.id &&
+  (order.assignedMechanicId !== null ||
+    !["reservada", "recibida", "diagnostico"].includes(order.status))
+)
+  return forbiddenResponse();
 const number = formatOrderNumber(order.number);
 const actionSchema = z.discriminatedUnion("accion", [
   checklistFormSchema.extend({ accion: z.literal("checklist") }),
   accessoryFormSchema.extend({ accion: z.literal("accesorio") }),
   z.object({ accion: z.literal("quitar"), accessoryId: z.uuid() }),
+  z.object({
+    accion: z.literal("servicio"),
+    serviceId: catalogItemSchema.shape.serviceId,
+    quantity: catalogItemSchema.shape.quantity,
+  }),
+  z.object({ accion: z.literal("fecha"), date: deliveryDateSchema }),
 ]);
 let submitted: Record<string, string> = {};
 const fieldErrors: Record<string, string> = {};
@@ -62,6 +85,8 @@ const accessories = await listAccessories(db, user, order.id);
 if (Astro.request.method === "POST") {
   const form = await Astro.request.formData();
   submitted = Object.fromEntries([...form].map(([key, value]) => [key, String(value)]));
+  if (submitted.accion === "servicio" && !can(user.role, "items.add_catalog"))
+    return forbiddenResponse();
   const checks = Object.fromEntries(
     INTAKE_CHECK_KEYS.filter((key) => submitted[key]).map((key) => [
       key,
@@ -86,9 +111,22 @@ if (Astro.request.method === "POST") {
         ? await saveChecklist(db, user, order.id, input, now)
         : input.accion === "accesorio"
           ? await addAccessory(db, user, order.id, input, now)
-          : accessories.some((row) => row.id === input.accessoryId)
-            ? await voidAccessory(db, user, input.accessoryId, now)
-            : ({ ok: false, code: "not_found" } as const);
+          : input.accion === "servicio"
+            ? await addCatalogItem(
+                db,
+                user,
+                order.id,
+                {
+                  serviceId: input.serviceId,
+                  quantity: input.quantity,
+                },
+                now,
+              )
+            : input.accion === "fecha"
+              ? await confirmDeliveryDate(db, user, order.id, input.date, now)
+              : accessories.some((row) => row.id === input.accessoryId)
+                ? await voidAccessory(db, user, input.accessoryId, now)
+                : ({ ok: false, code: "not_found" } as const);
     if (result.ok)
       return new Response(null, {
         status: 303,
@@ -105,10 +143,22 @@ if (Astro.request.method === "POST") {
         ? "El checklist solo se puede guardar en una orden reservada o recibida."
         : result.code === "not_found"
           ? "No se encontró la orden o el accesorio."
-          : "Revisa los datos de la recepción.";
+          : result.code === "no_price"
+            ? "El servicio no tiene precio para este tipo de bicicleta."
+            : result.code === "invalid_date"
+              ? "La fecha de entrega debe ser hoy o posterior."
+              : "Revisa los datos de la recepción.";
   }
 }
 const checks = await listIntakeChecks(db, user, order.id);
+const items = await listItems(db, user, order.id);
+const catalog = (await listCatalog(db, user)).filter((service) => service.isActive);
+const today = localToday(now);
+const suggestedDate = suggestDeliveryDate({
+  now,
+  orderMinutes: order.estimatedMinutes,
+  loadByDate: await loadByDate(db, user.branchId, addDays(today, 1), addDays(today, 60), order.id),
+});
 const missing = INTAKE_CHECK_KEYS.filter(
   (key) => !checks.some((row) => row.itemKey === key),
 ).length;
@@ -144,6 +194,7 @@ const values: Record<string, string> = {
   {Astro.url.searchParams.get("hecho") === "checklist" && <p role="status">Checklist guardado.</p>}
   {Astro.url.searchParams.get("hecho") === "accesorio" && <p role="status">Accesorio agregado.</p>}
   {Astro.url.searchParams.get("hecho") === "quitar" && <p role="status">Accesorio quitado.</p>}
+  {Astro.url.searchParams.get("hecho") === "servicio" && <p role="status">Servicio agregado.</p>}
   <section aria-labelledby="checklist-heading">
     <h2 id="checklist-heading">Checklist</h2>
     <p role="status">{missing === 0 ? "Checklist completo" : `Faltan ${missing} puntos`}</p>
@@ -204,6 +255,48 @@ const values: Record<string, string> = {
         {fieldErrors.description && <p id="accessory-error">{fieldErrors.description}</p>}
       </div>
       <button type="submit" class="btn">Agregar accesorio</button>
+    </form>
+  </section>
+  <section aria-labelledby="services-heading">
+    <h2 id="services-heading">Servicios</h2>
+    <form method="post" action={Astro.url.pathname}>
+      <input type="hidden" name="accion" value="servicio" />
+      <div class="field">
+        <label for="catalog-service">Servicio del catálogo</label>
+        <select id="catalog-service" name="serviceId" required aria-invalid={Boolean(fieldErrors.serviceId)} aria-describedby={fieldErrors.serviceId ? "service-error" : undefined}>
+          <option value="">Selecciona un servicio</option>
+          {catalog.map((service) => (
+            <option value={service.id} selected={submitted.serviceId === service.id} disabled={service.prices[bike.bikeType as BikeType] === undefined}>
+              {service.name} · {service.prices[bike.bikeType as BikeType] === undefined ? "Sin precio para esta bicicleta" : formatClp(service.prices[bike.bikeType as BikeType]!)}
+            </option>
+          ))}
+        </select>
+        {fieldErrors.serviceId && <p id="service-error">{fieldErrors.serviceId}</p>}
+      </div>
+      <button type="submit" class="btn">Agregar servicio</button>
+    </form>
+    {items.length === 0 ? <p>No hay servicios registrados.</p> : (
+      <table class="dense">
+        <thead><tr><th scope="col">Servicio</th><th scope="col">Cantidad</th><th scope="col">Precio unitario</th><th scope="col">Subtotal</th></tr></thead>
+        <tbody>{items.map((item) => (
+          <tr><td>{item.description}</td><td>{item.quantity}</td><td>{formatClp(item.unitPriceClp)}</td><td>{formatClp(item.quantity * item.unitPriceClp)}</td></tr>
+        ))}</tbody>
+      </table>
+    )}
+    <p>Total: {formatClp(order.totalClp)}</p>
+  </section>
+  <section aria-labelledby="delivery-heading">
+    <h2 id="delivery-heading">Fecha de entrega</h2>
+    <p>Sugerida: {suggestedDate}</p>
+    {order.deliveryDateConfirmedAt && <p role="status">Fecha confirmada: {order.estimatedDeliveryDate}</p>}
+    <form method="post" action={Astro.url.pathname}>
+      <input type="hidden" name="accion" value="fecha" />
+      <div class="field">
+        <label for="delivery-date">Fecha de entrega</label>
+        <input id="delivery-date" name="date" type="date" required min={today} value={submitted.date ?? order.estimatedDeliveryDate ?? suggestedDate} aria-invalid={Boolean(fieldErrors.date)} aria-describedby={fieldErrors.date ? "delivery-date-error" : undefined} />
+        {fieldErrors.date && <p id="delivery-date-error">{fieldErrors.date}</p>}
+      </div>
+      <button type="submit" class="btn">Confirmar fecha</button>
     </form>
   </section>
 </TallerLayout>
