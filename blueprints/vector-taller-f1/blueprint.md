@@ -1635,6 +1635,7 @@ pnpm gate                        # expect: exit 0
 | `pnpm` global más antiguo que 12.4.2 | A | M | `pnpm --version` ≠ `12.4.2`; el Bootstrap falla | Prerrequisito explícito en §10 con `corepack enable` + `corepack prepare pnpm@12.4.2 --activate` |
 | Comando destructivo aprobado por error | B | A | Base dev vacía o commits perdidos | Confirmación del operador cada vez; guarda `REPLIT_DEPLOYMENT`; checkpoints `f1-NN` como puntos de vuelta |
 | Alcance que crece y la fase nunca entra en uso | M | A | Pedidos fuera de §2.4 | No-Objetivos de §1; criterio 14 cierra la fase |
+| Subida de fotos sin `content-length` (aceptado en F1-19, 2026-10-07): el corte de 16 MiB de `handlePhotoUpload` se basa en esa cabecera; un usuario **con sesión** que envía el cuerpo en chunked la evita, y `formData()` carga todo en memoria antes del corte de 15 MB del archivo | B | M | Memoria alta o reinicio del proceso en Autoscale durante una subida | Aceptado por ahora: solo personal autenticado (dos personas). **Pendiente:** límite de tamaño de cuerpo en el adaptador de Node (o leer el stream con tope antes de `formData()`), en un commit propio |
 
 Aceptado: `/api/tareas/alertas` envía un resumen cada vez que se llama (no idempotente por diseño; Make.com lo llama una vez al día).
 
