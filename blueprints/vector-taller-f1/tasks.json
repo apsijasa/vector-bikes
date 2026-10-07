@@ -462,7 +462,7 @@
     ],
     "checkpoint": "f1-20",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/reception.ts", "src/server/taller/photos.ts", "tests/integration/reception.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T5",

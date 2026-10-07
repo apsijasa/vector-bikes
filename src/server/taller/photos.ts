@@ -6,7 +6,7 @@ import { isAllowedOrigin, jsonResponse } from "../api/handlers.ts";
 import type { SessionUser } from "../auth/admin-auth.ts";
 import { can } from "../auth/permissions.ts";
 import type { AppDb } from "../db/client.ts";
-import { orderPhotos, workOrders } from "../db/schema-orders.ts";
+import { orderPhotos, orderSignatures, workOrders } from "../db/schema-orders.ts";
 import type { WorkOrder } from "../db/schema-orders.ts";
 import { InvalidImageError, processPhoto } from "../storage/images.ts";
 import { isStorageKey } from "../storage/storage.ts";
@@ -259,18 +259,22 @@ export async function listOrderPhotos(db: AppDb, actor: SessionUser, orderId: st
 const uuidPattern = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const mediaKeySchema = z
   .string()
-  .regex(new RegExp(`^orders/${uuidPattern}/${uuidPattern}-(full|thumb)\\.jpg$`))
+  .regex(
+    new RegExp(
+      `^orders/${uuidPattern}/(?:${uuidPattern}-(full|thumb)\\.jpg|signature-(recepcion|entrega)-${uuidPattern}\\.png)$`,
+    ),
+  )
   .refine(isStorageKey);
 
-export async function handleMediaRequest(
-  db: AppDb,
-  storage: ObjectStorage,
-  actor: SessionUser | null,
-  key: string,
-): Promise<Response> {
-  if (!actor) return photoError(401, "unauthorized");
-  if (!can(actor.role, "photos.upload")) return photoError(403, "forbidden");
-  if (!mediaKeySchema.safeParse(key).success) return photoError(404, "not_found");
+async function mediaOrderId(db: AppDb, actor: SessionUser, key: string) {
+  if (key.endsWith(".png")) {
+    const [signature] = await db
+      .select({ workOrderId: orderSignatures.workOrderId })
+      .from(orderSignatures)
+      .where(and(eq(orderSignatures.branchId, actor.branchId), eq(orderSignatures.storageKey, key)))
+      .limit(1);
+    return signature?.workOrderId ?? null;
+  }
   const [photo] = await db
     .select()
     .from(orderPhotos)
@@ -282,8 +286,22 @@ export async function handleMediaRequest(
       ),
     )
     .limit(1);
-  if (!photo || (key === photo.fullKey && photo.fullPurgedAt)) return photoError(404, "not_found");
-  const header = await getOrderHeader(db, actor, photo.workOrderId);
+  if (!photo || (key === photo.fullKey && photo.fullPurgedAt)) return null;
+  return photo.workOrderId;
+}
+
+export async function handleMediaRequest(
+  db: AppDb,
+  storage: ObjectStorage,
+  actor: SessionUser | null,
+  key: string,
+): Promise<Response> {
+  if (!actor) return photoError(401, "unauthorized");
+  if (!can(actor.role, "photos.upload")) return photoError(403, "forbidden");
+  if (!mediaKeySchema.safeParse(key).success) return photoError(404, "not_found");
+  const orderId = await mediaOrderId(db, actor, key);
+  if (!orderId) return photoError(404, "not_found");
+  const header = await getOrderHeader(db, actor, orderId);
   if (!header || header.order.voidedAt) return photoError(404, "not_found");
   if (!canAccessPhotoOrder(actor, header.order)) return photoError(403, "forbidden");
   const body = await storage.get(key);
@@ -291,7 +309,7 @@ export async function handleMediaRequest(
   return new Response(new Uint8Array(body), {
     status: 200,
     headers: {
-      "content-type": "image/jpeg",
+      "content-type": key.endsWith(".png") ? "image/png" : "image/jpeg",
       "cache-control": "private, max-age=300",
       "x-content-type-options": "nosniff",
     },

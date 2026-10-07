@@ -236,6 +236,34 @@ export const orderPhotos = pgTable(
   ],
 );
 
+export const orderSignatures = pgTable(
+  "order_signatures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    kind: text("kind").$type<"recepcion" | "entrega">().notNull(),
+    storageKey: text("storage_key").notNull(),
+    signedByName: text("signed_by_name").notNull(),
+    signedAt: instant("signed_at").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_order_signatures_storage_key").on(t.storageKey),
+    uniqueIndex("uq_order_signatures_order_kind").on(t.workOrderId, t.kind),
+    index("idx_order_signatures_order").on(t.workOrderId),
+    check("order_signatures_kind_check", sql`kind in ('recepcion', 'entrega')`),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
@@ -243,5 +271,6 @@ export const orderTables = [
   intakeAccessories,
   workOrderItems,
   orderPhotos,
+  orderSignatures,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;
