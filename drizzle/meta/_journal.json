@@ -85,6 +85,13 @@
       "when": 1791398920501,
       "tag": "0011_nappy_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791401702898,
+      "tag": "0012_talented_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

@@ -27,4 +27,5 @@ test "$(code /admin)" = 303
 test "$(code '/reservas/cancelar?token=no-existe')" = 404
 test "$(code /robots.txt)" = 200
 test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/tareas/recordatorios")" = 401
+test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/taller/ordenes/x/fotos")" = 401
 echo "smoke ok: $HEALTH"

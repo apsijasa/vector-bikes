@@ -198,11 +198,50 @@ export const workOrderItems = pgTable(
   ],
 );
 
+export const orderPhotos = pgTable(
+  "order_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    stage: text("stage").$type<"recepcion" | "reparacion" | "terminado">().notNull(),
+    retentionClass: text("retention_class").$type<"recepcion_6m" | "permanente">().notNull(),
+    fullKey: text("full_key").notNull(),
+    thumbKey: text("thumb_key").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    fullPurgedAt: instant("full_purged_at"),
+    voidedAt: instant("voided_at"),
+    voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_order_photos_full_key").on(t.fullKey),
+    uniqueIndex("uq_order_photos_thumb_key").on(t.thumbKey),
+    index("idx_order_photos_order_stage").on(t.workOrderId, t.stage),
+    index("idx_order_photos_retention_created").on(t.retentionClass, t.createdAt),
+    check("order_photos_stage_check", sql`stage in ('recepcion', 'reparacion', 'terminado')`),
+    check(
+      "order_photos_retention_check",
+      sql`(stage = 'recepcion' and retention_class = 'recepcion_6m') or (stage <> 'recepcion' and retention_class = 'permanente')`,
+    ),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
   intakeChecks,
   intakeAccessories,
   workOrderItems,
+  orderPhotos,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;

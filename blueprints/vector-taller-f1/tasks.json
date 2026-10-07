@@ -438,7 +438,7 @@
     ],
     "checkpoint": "f1-19",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/photos.ts", "src/pages/taller/ordenes/[id]/fotos.ts", "src/pages/taller/media/[...key].ts", "tests/integration/photos.test.ts", "scripts/smoke.sh"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T4",
