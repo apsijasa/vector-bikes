@@ -388,7 +388,7 @@
     ],
     "checkpoint": "f1-17",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/intake.ts", "src/pages/taller/ordenes/[id]/recepcion.astro", "tests/integration/intake.test.ts", "e2e/recepcion-checklist.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T2",

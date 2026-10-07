@@ -110,5 +110,61 @@ export const workOrderStatusHistory = pgTable(
   (t) => [index("idx_work_order_status_history_order_created").on(t.workOrderId, t.createdAt)],
 );
 
-export const orderTables = [workOrders, workOrderStatusHistory] as const;
+export const intakeChecks = pgTable(
+  "intake_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    itemKey: text("item_key").notNull(),
+    result: text("result").notNull(),
+    note: text("note"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_intake_checks_order_item").on(t.workOrderId, t.itemKey),
+    check(
+      "intake_checks_item_key_check",
+      sql`item_key in ('frenos', 'cadena', 'transmision', 'ruedas', 'neumaticos', 'estado_general', 'problemas_visibles')`,
+    ),
+    check("intake_checks_result_check", sql`result in ('ok', 'revisar', 'malo')`),
+  ],
+);
+
+export const intakeAccessories = pgTable(
+  "intake_accessories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    description: text("description").notNull(),
+    voidedAt: instant("voided_at"),
+    voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("idx_intake_accessories_order").on(t.workOrderId)],
+);
+
+export const orderTables = [
+  workOrders,
+  workOrderStatusHistory,
+  intakeChecks,
+  intakeAccessories,
+] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;
