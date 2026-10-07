@@ -298,7 +298,7 @@
     ],
     "checkpoint": "f1-13",
     "files": ["src/server/taller/search.ts", "src/pages/taller/buscar.astro", "tests/integration/search.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T6",
