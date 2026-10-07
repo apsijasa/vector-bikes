@@ -18,7 +18,7 @@ export type CreateBookingInput = {
   start: string;
   customerName: string;
   phoneE164: string;
-  email: string;
+  email: string | null;
   bike: string;
   description: string;
   comuna: string | null;

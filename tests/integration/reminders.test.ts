@@ -56,6 +56,25 @@ describe("recordatorios", () => {
     return () => test.close();
   });
 
+  it("omite reservas sin correo y envía a las que sí tienen correo el mismo día", async () => {
+    const withoutEmail = await newBooking(test.db, "taller", "2026-09-16", "15:00", "+56911111111");
+    await test.db.update(bookings).set({ email: null }).where(eq(bookings.id, withoutEmail.id));
+    const withEmail = await newBooking(test.db, "taller", "2026-09-16", "15:30", "+56922222222");
+
+    expect(await sendReminders(test.db, NOW)).toEqual({ sent: 1, failed: 0 });
+    expect(consoleOutbox).toHaveLength(1);
+    expect(consoleOutbox[0]?.to).toBe(withEmail.email);
+    expect(consoleOutbox[0]?.subject).toContain(withEmail.code);
+    expect(await reminderState(test.db)).toEqual({
+      [withoutEmail.id]: false,
+      [withEmail.id]: true,
+    });
+    const [stored] = await test.db.select().from(bookings).where(eq(bookings.id, withoutEmail.id));
+    expect(stored?.reminderSentAt).toBeNull();
+    expect(await sendReminders(test.db, NOW)).toEqual({ sent: 0, failed: 0 });
+    expect(consoleOutbox).toHaveLength(1);
+  });
+
   it("envía una vez a las confirmadas de mañana y la segunda corrida no envía nada", async () => {
     const a = await newBooking(test.db, "taller", "2026-09-16", "15:00", "+56911111111");
     const b = await newBooking(test.db, "retiro", "2026-09-16", "17:00", "+56922222222");

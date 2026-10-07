@@ -79,15 +79,16 @@ export async function notifyBookingCreated(
   const transport = deps.transport ?? createTransport(env);
   const siteUrl = deps.siteUrl ?? getSiteEnv().PUBLIC_SITE_URL;
 
-  const confirmation = message(
-    booking.email,
-    customerConfirmationEmail(booking, cancelUrlFor(cancelToken, siteUrl)),
-  );
-  confirmation.attachments = [
-    { filename: ICS_FILENAME, content: buildIcs(booking), contentType: "text/calendar" },
-  ];
-
-  await deliver(transport, "confirmation", booking.code, confirmation);
+  if (booking.email !== null) {
+    const confirmation = message(
+      booking.email,
+      customerConfirmationEmail(booking, cancelUrlFor(cancelToken, siteUrl)),
+    );
+    confirmation.attachments = [
+      { filename: ICS_FILENAME, content: buildIcs(booking), contentType: "text/calendar" },
+    ];
+    await deliver(transport, "confirmation", booking.code, confirmation);
+  }
   await deliver(
     transport,
     "shop_new_booking",

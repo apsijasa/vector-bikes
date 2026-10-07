@@ -59,6 +59,24 @@ describe("API pública", () => {
     return () => test.close();
   });
 
+  it("rechaza una reserva web sin correo con un error de validación 422", async () => {
+    const onCreated = vi.fn(async () => {});
+    const response = await handleCreateBooking(postRequest(body({ correo: undefined })), {
+      ...ctx,
+      onCreated,
+    });
+
+    expect(response.status).toBe(422);
+    const payload = (await response.json()) as {
+      code: string;
+      fields: Record<string, string>;
+    };
+    expect(payload.code).toBe("validation_error");
+    expect(payload.fields.correo).toBeDefined();
+    expect(await countBookings(test.db)).toBe(0);
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
   it("entrega la disponibilidad del rango con los feriados marcados", async () => {
     const url = new URL(
       "https://vectorbikes.cl/api/disponibilidad?desde=2026-09-16&dias=4&modo=taller",

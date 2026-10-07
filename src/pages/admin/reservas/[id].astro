@@ -205,7 +205,7 @@ const noticeStatusLabel: Record<string, string> = {
               <div class="row">
                 <dt>Correo</dt>
                 <dd>
-                  <a href={`mailto:${booking.email}`}>{booking.email}</a>
+                  {booking.email ? <a href={`mailto:${booking.email}`}>{booking.email}</a> : "Sin correo"}
                 </dd>
               </div>
               <div class="row">

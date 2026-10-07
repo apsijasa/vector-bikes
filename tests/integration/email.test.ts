@@ -94,6 +94,31 @@ describe("correos transaccionales", () => {
     vi.unstubAllGlobals();
   });
 
+  it("sin correo envía solo el aviso al taller, sin adjunto ni error", async () => {
+    const { booking, cancelToken } = await newBooking(test, { email: null });
+
+    await expect(notifyBookingCreated(booking, cancelToken)).resolves.toBeUndefined();
+
+    expect(consoleOutbox).toHaveLength(1);
+    expect(consoleOutbox[0]?.to).toBe(SHOP);
+    expect(consoleOutbox[0]?.subject).toBe(`Nueva reserva ${booking.code}`);
+    expect(consoleOutbox[0]?.text).toContain("Correo: Sin correo");
+    expect(consoleOutbox[0]?.html).toContain("Sin correo");
+    expect(consoleOutbox[0]?.attachments).toBeUndefined();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("muestra Sin correo en el aviso de cancelación al taller", async () => {
+    const { booking } = await newBooking(test, { email: null });
+
+    await notifyBookingCancelled(booking);
+
+    expect(consoleOutbox).toHaveLength(1);
+    expect(consoleOutbox[0]?.to).toBe(SHOP);
+    expect(consoleOutbox[0]?.text).toContain("Correo: Sin correo");
+    expect(consoleOutbox[0]?.html).toContain("Sin correo");
+  });
+
   it("encola 2 correos después del 201: cliente y taller", async () => {
     const turnstileFetch = (async () =>
       new Response(JSON.stringify({ success: true }), {
@@ -191,6 +216,7 @@ describe("correos transaccionales", () => {
 
   it("arma el payload de Resend con replyTo y adjunto en base64", async () => {
     const { booking } = await newBooking(test);
+    if (booking.email === null) throw new Error("la reserva de prueba debe tener correo");
     const ics = buildIcs(booking);
     const env = { ...getEmailEnv(), EMAIL_TRANSPORT: "resend" as const, RESEND_API_KEY: "re_x" };
 

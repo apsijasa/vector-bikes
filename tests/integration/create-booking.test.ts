@@ -45,6 +45,45 @@ describe("createBooking", () => {
     return () => test.close();
   });
 
+  it("inserta una reserva sin correo y rechaza otro intento al mismo bloque", async () => {
+    const first = await createBooking(db, input({ email: null }), NOW);
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      throw new Error(first.code);
+    }
+    expect(first.booking.email).toBeNull();
+    const [stored] = await db.select().from(bookings).where(eq(bookings.id, first.booking.id));
+    expect(stored?.email).toBeNull();
+
+    const second = await createBooking(db, input({ email: null, phoneE164: "+56922222222" }), NOW);
+    expect(second).toEqual({ ok: false, code: "slot_unavailable" });
+    expect(await activeStarts(db, "2026-09-16")).toEqual(["16:30:00"]);
+  });
+
+  it("mantiene el máximo de cuatro reservas diarias cuando no tienen correo", async () => {
+    const starts = ["15:00", "15:30", "16:00", "16:30"];
+    for (const [index, start] of starts.entries()) {
+      const created = await createBooking(
+        db,
+        input({ email: null, start, phoneE164: `+5693000000${index}` }),
+        NOW,
+      );
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        throw new Error(created.code);
+      }
+      expect(created.booking.email).toBeNull();
+    }
+    const fifth = await createBooking(
+      db,
+      input({ email: null, start: "17:00", phoneE164: "+56930000009" }),
+      NOW,
+    );
+    expect(fifth).toEqual({ ok: false, code: "slot_unavailable" });
+    expect(await activeStarts(db, "2026-09-16")).toEqual(starts.map((start) => `${start}:00`));
+    expect(await db.select().from(bookings)).toHaveLength(4);
+  });
+
   it("crea una reserva de taller con código y un bloque", async () => {
     const result = await createBooking(db, input(), NOW);
     expect(result.ok).toBe(true);

@@ -138,7 +138,7 @@ export function shopNewBookingEmail(booking: Booking): RenderedEmail {
       ...scheduleRows(booking),
       ["Cliente", booking.customerName],
       ["Teléfono", booking.phoneE164],
-      ["Correo", booking.email],
+      ["Correo", booking.email ?? "Sin correo"],
       ...bikeRows(booking),
     ],
     notes: [],
@@ -168,7 +168,7 @@ export function shopCancellationEmail(booking: Booking): RenderedEmail {
       ...scheduleRows(booking),
       ["Cliente", booking.customerName],
       ["Teléfono", booking.phoneE164],
-      ["Correo", booking.email],
+      ["Correo", booking.email ?? "Sin correo"],
     ],
     notes: [],
   });

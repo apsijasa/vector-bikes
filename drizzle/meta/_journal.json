@@ -57,6 +57,13 @@
       "when": 1791378675612,
       "tag": "0007_mushy_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791380177168,
+      "tag": "0008_hard_zodiak",
+      "breakpoints": true
     }
   ]
 }

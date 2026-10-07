@@ -36,7 +36,7 @@ export const bookings = pgTable(
     timezone: text("timezone").notNull().default("America/Santiago"),
     customerName: text("customer_name").notNull(),
     phoneE164: text("phone_e164").notNull(),
-    email: text("email").notNull(),
+    email: text("email"),
     bike: text("bike").notNull(),
     description: text("description").notNull(),
     comuna: text("comuna"),

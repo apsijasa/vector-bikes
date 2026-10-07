@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { errorMessage, log } from "../../lib/log.ts";
 import { addDays, localToday } from "../booking/slots.ts";
 import type { AppDb } from "../db/client.ts";
@@ -26,6 +26,7 @@ export async function sendReminders(
         inArray(bookings.status, ["confirmed", "ready_for_pickup"]),
         eq(bookings.serviceDate, tomorrow),
         isNull(bookings.reminderSentAt),
+        isNotNull(bookings.email),
       ),
     )
     .orderBy(asc(bookings.startsAt));
@@ -33,6 +34,9 @@ export async function sendReminders(
   let sent = 0;
   let failed = 0;
   for (const booking of pending) {
+    if (booking.email === null) {
+      continue;
+    }
     try {
       await deps.transport.send({ to: booking.email, ...reminderEmail(booking) });
     } catch (error) {
