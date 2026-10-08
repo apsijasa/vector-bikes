@@ -1,0 +1,63 @@
+---
+import { z } from "zod";
+import PhotoCapture from "../../../../components/taller/PhotoCapture.tsx";
+import TallerLayout from "../../../../layouts/TallerLayout.astro";
+import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../../server/auth/admin-auth.ts";
+import { can, forbiddenResponse } from "../../../../server/auth/permissions.ts";
+import { getDb } from "../../../../server/db/client.ts";
+import { formatOrderNumber } from "../../../../server/taller/orders.ts";
+import { listOrderPhotos, stageAcceptsStatus } from "../../../../server/taller/photos.ts";
+import { STATUS_LABELS } from "../../../../server/taller/rules.ts";
+import type { OrderStatus } from "../../../../server/taller/rules.ts";
+import { canAccessOrder, orderDetail } from "../../../../server/taller/status.ts";
+
+export const prerender = false;
+const db = getDb();
+const user = await requireAdmin(db, Astro.cookies.get(SESSION_COOKIE)?.value, new Date());
+if (!user)
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: loginRedirect(Astro.url.pathname + Astro.url.search),
+      "cache-control": "no-store",
+    },
+  });
+if (!can(user.role, "photos.upload")) return forbiddenResponse();
+Astro.response.headers.set("cache-control", "no-store");
+const id = z.uuid().safeParse(Astro.params.id);
+if (!id.success)
+  return new Response("Orden no encontrada.", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
+const detail = await orderDetail(db, user, id.data);
+if (!detail.ok) {
+  if (detail.code === "forbidden") return forbiddenResponse();
+  return new Response("Orden no encontrada.", {
+    status: 404,
+    headers: { "cache-control": "no-store" },
+  });
+}
+const { order } = detail;
+const number = formatOrderNumber(order.number);
+const photos = await listOrderPhotos(db, user, order.id);
+const canUpload = can(user.role, "photos.upload") && canAccessOrder(user, order);
+const stages = [
+  { stage: "recepcion", title: "Recepción", label: "Foto de recepción" },
+  { stage: "reparacion", title: "Reparación", label: "Foto de reparación" },
+  { stage: "terminado", title: "Trabajo terminado", label: "Foto de trabajo terminado" },
+] as const;
+---
+
+<TallerLayout title={`${number} · Galería — Vector Bikes`} description="Fotos de la orden agrupadas por etapa." path="/taller/ordenes" user={user}>
+  <h1>{number} · Galería</h1>
+  <span class={`status status--${order.status}`}>{STATUS_LABELS[order.status as OrderStatus]}</span>
+  <a class="btn ghost" href={`/taller/ordenes/${order.id}`}>Volver a la orden</a>
+  {stages.map(({ stage, title, label }) => <section aria-labelledby={`${stage}-heading`}>
+    <h2 id={`${stage}-heading`}>{title}</h2>
+    <div class="grid-photos">
+      {photos.filter((photo) => photo.stage === stage).map((photo, index) => <img src={photo.thumbUrl} alt={`${label} ${index + 1}`} />)}
+    </div>
+    {stage !== "recepcion" && canUpload && stageAcceptsStatus(stage, order.status) && <PhotoCapture client:load uploadUrl={`/taller/ordenes/${order.id}/fotos`} stage={stage} label={label} />}
+  </section>)}
+</TallerLayout>

@@ -571,7 +571,7 @@
     ],
     "checkpoint": "f1-25",
     "files": ["src/server/taller/orders.ts", "src/pages/taller/ordenes/[id]/galeria.astro", "src/pages/taller/ordenes/[id]/index.astro", "tests/integration/warranty.test.ts", "e2e/galeria.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E4-T2",

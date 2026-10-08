@@ -307,3 +307,66 @@ export async function updateTaxDocument(
     return { ok: true } as const;
   });
 }
+
+async function recordWarrantyOpening(
+  db: AppDb,
+  actor: SessionUser,
+  orderId: string,
+  originalNumber: number,
+  now: Date,
+) {
+  const author = { branchId: actor.branchId, actorUserId: actor.id };
+  await recordStatusChange(db, { ...author, orderId, from: null, to: "reservada" }, now);
+  await recordAudit(
+    db,
+    {
+      ...author,
+      action: "order.warranty_opened",
+      entity: "work_order",
+      entityId: orderId,
+      details: { originalNumber },
+    },
+    now,
+  );
+}
+
+export async function openWarrantyOrder(
+  db: AppDb,
+  actor: SessionUser,
+  originalId: string,
+  input: { reason: string },
+  now: Date,
+) {
+  if (!can(actor.role, "warranty.open")) return { ok: false, code: "forbidden" } as const;
+  const parsed = z.object({ reason: z.string().trim().min(3).max(300) }).safeParse(input);
+  if (!parsed.success) return { ok: false, code: "validation_error" } as const;
+  return db.transaction(async (tx) => {
+    const [original] = await tx
+      .select()
+      .from(workOrders)
+      .where(and(eq(workOrders.branchId, actor.branchId), eq(workOrders.id, originalId)))
+      .for("update");
+    if (!original || original.voidedAt) return { ok: false, code: "not_found" } as const;
+    if (original.status !== "entregada") return { ok: false, code: "not_delivered" } as const;
+    const number = await allocateOrderNumber(tx, actor.branchId);
+    const [order] = await tx
+      .insert(workOrders)
+      .values({
+        branchId: actor.branchId,
+        number,
+        customerId: original.customerId,
+        bikeId: original.bikeId,
+        warrantyOfOrderId: originalId,
+        status: "reservada",
+        requestedService: `Garantía de ${formatOrderNumber(original.number)}: ${parsed.data.reason}`,
+        createdBy: actor.id,
+        assignedMechanicId: actor.role === "mechanic" ? actor.id : null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    if (!order) throw new Error("No se pudo crear la orden de garantía.");
+    await recordWarrantyOpening(tx, actor, order.id, original.number, now);
+    return { ok: true, orderId: order.id } as const;
+  });
+}

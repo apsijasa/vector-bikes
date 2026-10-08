@@ -17,7 +17,7 @@ import type { OrderStatus } from "./rules.ts";
 import { canAccessOrder } from "./status.ts";
 
 export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
-type PhotoStage = (typeof PHOTO_STAGES)[number];
+export type PhotoStage = (typeof PHOTO_STAGES)[number];
 const stageStatuses: Record<PhotoStage, readonly OrderStatus[]> = {
   recepcion: ["reservada", "recibida"],
   reparacion: [
@@ -29,6 +29,10 @@ const stageStatuses: Record<PhotoStage, readonly OrderStatus[]> = {
   ],
   terminado: ["control_calidad", "lista_para_retirar"],
 };
+
+export function stageAcceptsStatus(stage: PhotoStage, status: string): boolean {
+  return (stageStatuses[stage] as readonly string[]).includes(status);
+}
 const photoInputSchema = z.object({
   orderId: z.uuid(),
   stage: z.enum(PHOTO_STAGES),
@@ -84,7 +88,7 @@ function canAccessPhotoOrder(actor: SessionUser, order: WorkOrder, stage?: Photo
     (actor.role !== "mechanic" ||
       order.assignedMechanicId !== null ||
       stage === undefined ||
-      (stage === "recepcion" && stageStatuses.recepcion.includes(order.status as OrderStatus)))
+      (stage === "recepcion" && stageAcceptsStatus(stage, order.status)))
   );
 }
 
@@ -93,7 +97,7 @@ async function uploadAccess(db: AppDb, actor: SessionUser, input: PhotoInput) {
   if (!header || header.order.voidedAt) return { ok: false, code: "not_found" } as const;
   if (!canAccessPhotoOrder(actor, header.order, input.stage))
     return { ok: false, code: "forbidden" } as const;
-  if (!stageStatuses[input.stage].includes(header.order.status as OrderStatus))
+  if (!stageAcceptsStatus(input.stage, header.order.status))
     return { ok: false, code: "invalid_status" } as const;
   return { ok: true } as const;
 }

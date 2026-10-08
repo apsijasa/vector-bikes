@@ -7,7 +7,7 @@ import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../../server/
 import { can, forbiddenResponse } from "../../../../server/auth/permissions.ts";
 import type { Action } from "../../../../server/auth/permissions.ts";
 import { getDb } from "../../../../server/db/client.ts";
-import { formatOrderNumber } from "../../../../server/taller/orders.ts";
+import { formatOrderNumber, openWarrantyOrder } from "../../../../server/taller/orders.ts";
 import {
   BIKE_TYPE_LABELS,
   MANUAL_TRANSITIONS,
@@ -48,7 +48,8 @@ if (!id.success)
     headers: { "cache-control": "no-store" },
   });
 const PATH = `/taller/ordenes/${id.data}`;
-const actionSchema = z.enum(["status", "assign", "take", "notes"]);
+const actionSchema = z.enum(["status", "assign", "take", "notes", "warranty"]);
+const warrantySchema = z.object({ reason: z.string().trim().min(3).max(300) });
 const noteFields = [
   { key: "diagnosis", label: "Diagnóstico" },
   { key: "observations", label: "Observaciones" },
@@ -62,17 +63,33 @@ if (Astro.request.method === "POST") {
   const action = form.get("action");
   const to = form.get("to");
   const permission: Action =
-    action === "assign"
-      ? "orders.assign"
-      : action === "status" && (to === "cancelada" || to === "trabajo_rechazado")
-        ? "orders.cancel"
-        : "orders.edit";
+    action === "warranty"
+      ? "warranty.open"
+      : action === "assign"
+        ? "orders.assign"
+        : action === "status" && (to === "cancelada" || to === "trabajo_rechazado")
+          ? "orders.cancel"
+          : "orders.edit";
   if (!can(user.role, permission) || (action === "take" && user.role !== "mechanic"))
     return forbiddenResponse();
   const parsedAction = actionSchema.safeParse(action);
   values = Object.fromEntries([...form].map(([key, value]) => [key, String(value)]));
   let result: { ok: boolean; code?: string } = { ok: false, code: "validation_error" };
-  if (parsedAction.success && parsedAction.data === "status") {
+  if (parsedAction.success && parsedAction.data === "warranty") {
+    const parsed = warrantySchema.safeParse({ reason: form.get("reason") });
+    if (parsed.success) {
+      const warranty = await openWarrantyOrder(db, user, id.data, parsed.data, now);
+      if (warranty.ok)
+        return new Response(null, {
+          status: 303,
+          headers: {
+            location: `/taller/ordenes/${warranty.orderId}/recepcion`,
+            "cache-control": "no-store",
+          },
+        });
+      result = warranty;
+    } else fieldErrors.reason = "El motivo debe tener entre 3 y 300 caracteres.";
+  } else if (parsedAction.success && parsedAction.data === "status") {
     const parsed = statusChangeSchema.safeParse({ to, note: form.get("note") || null });
     if (parsed.success)
       result = await changeOrderStatus(db, user, id.data, parsed.data.to, parsed.data.note, now);
@@ -157,10 +174,22 @@ const navigation: { suffix: string; label: string; permission: Action }[] = [
   <p>Servicio solicitado: {order.requestedService}</p>
   <p>Entrega estimada: {order.estimatedDeliveryDate ?? "Sin fecha"}</p>
   <p>Total para el cliente: {formatClp(order.totalClp)}</p>
-  {warrantyOfNumber !== null && <p>Garantía de {formatOrderNumber(warrantyOfNumber)}</p>}
+  {warrantyOfNumber !== null && <span class="status">Garantía de {formatOrderNumber(warrantyOfNumber)}</span>}
   <nav aria-label="Acciones de la orden">
     {navigation.filter((link) => can(user.role, link.permission)).map((link) => <a class="btn ghost" href={`${PATH}/${link.suffix}`}>{link.label}</a>)}
   </nav>
+  {order.status === "entregada" && can(user.role, "warranty.open") && <section aria-labelledby="warranty-title">
+    <h2 id="warranty-title">Abrir garantía</h2>
+    <form method="post" action={PATH}>
+      <input type="hidden" name="action" value="warranty" />
+      <div class="field">
+        <label for="reason">Motivo</label>
+        <input id="reason" name="reason" type="text" required minlength="3" maxlength="300" value={values.reason ?? ""} aria-invalid={Boolean(fieldErrors.reason)} aria-describedby={fieldErrors.reason ? "reason-error" : undefined} />
+        {fieldErrors.reason && <p id="reason-error">{fieldErrors.reason}</p>}
+      </div>
+      <button class="btn" type="submit">Abrir garantía</button>
+    </form>
+  </section>}
   {targets.length > 0 && <section aria-labelledby="status-title">
     <h2 id="status-title">Cambiar estado</h2>
     <form method="post" action={PATH}>
