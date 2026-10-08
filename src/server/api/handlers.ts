@@ -235,7 +235,7 @@ function rateLimitKey(ctx: HandlerContext): string | null {
 }
 
 /** Devuelve la respuesta 429 cuando la IP se pasó del límite; no registra nada. */
-async function checkRateLimit(ctx: HandlerContext): Promise<Response | null> {
+export async function checkRateLimit(ctx: HandlerContext): Promise<Response | null> {
   const ipHash = rateLimitKey(ctx);
   if (ipHash === null) {
     return null;
@@ -254,7 +254,7 @@ async function checkRateLimit(ctx: HandlerContext): Promise<Response | null> {
 }
 
 /** Registra el intento; solo cuentan los que pasaron la validación (un 422 no suma). */
-async function recordAttempt(ctx: HandlerContext): Promise<void> {
+export async function recordAttempt(ctx: HandlerContext): Promise<void> {
   const ipHash = rateLimitKey(ctx);
   if (ipHash !== null) {
     await ctx.db.insert(bookingRequests).values({ ipHash, createdAt: ctx.now });

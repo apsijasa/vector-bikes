@@ -617,7 +617,7 @@
     ],
     "checkpoint": "f1-27",
     "files": ["src/pages/aprobacion/[token].astro", "src/server/taller/approvals.ts", "src/server/api/handlers.ts", "tests/integration/approvals.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E4-T4",
