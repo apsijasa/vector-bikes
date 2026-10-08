@@ -8,6 +8,7 @@ import { workOrders } from "../db/schema-orders.ts";
 import { recordAudit } from "./audit.ts";
 import { getOrderHeader } from "./orders.ts";
 import { LOAD_EXCLUDED_STATUSES, WORKSHOP_MINUTES_PER_DAY } from "./rules.ts";
+import { canAccessOrder } from "./status.ts";
 
 export const deliveryDateSchema = z.iso.date({ error: "Ingresa una fecha de entrega válida." });
 
@@ -80,13 +81,7 @@ async function lockAccessibleOrder(db: AppDb, actor: SessionUser, orderId: strin
   const header = await getOrderHeader(db, actor, orderId);
   if (!header) return { ok: false, code: "not_found" } as const;
   const { order } = header;
-  if (
-    actor.role === "mechanic" &&
-    order.assignedMechanicId !== actor.id &&
-    (order.assignedMechanicId !== null ||
-      !["reservada", "recibida", "diagnostico"].includes(order.status))
-  )
-    return { ok: false, code: "forbidden" } as const;
+  if (!canAccessOrder(actor, order)) return { ok: false, code: "forbidden" } as const;
   return { ok: true } as const;
 }
 

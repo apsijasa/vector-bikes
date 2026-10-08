@@ -14,6 +14,7 @@ import type { ObjectStorage } from "../storage/storage.ts";
 import { getOrderHeader } from "./orders.ts";
 import { PHOTO_STAGES } from "./rules.ts";
 import type { OrderStatus } from "./rules.ts";
+import { canAccessOrder } from "./status.ts";
 
 export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 type PhotoStage = (typeof PHOTO_STAGES)[number];
@@ -79,15 +80,11 @@ export function photoKeys(orderId: string, photoId: string) {
 
 function canAccessPhotoOrder(actor: SessionUser, order: WorkOrder, stage?: PhotoStage): boolean {
   return (
-    actor.role !== "mechanic" ||
-    order.assignedMechanicId === actor.id ||
-    (order.assignedMechanicId === null &&
-      (stage === undefined
-        ? ["reservada", "recibida", "diagnostico"]
-        : stage === "recepcion"
-          ? ["reservada", "recibida"]
-          : []
-      ).includes(order.status))
+    canAccessOrder(actor, order) &&
+    (actor.role !== "mechanic" ||
+      order.assignedMechanicId !== null ||
+      stage === undefined ||
+      (stage === "recepcion" && stageStatuses.recepcion.includes(order.status as OrderStatus)))
   );
 }
 

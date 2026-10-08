@@ -6,6 +6,7 @@ import type { AppDb } from "../db/client.ts";
 import { intakeAccessories, intakeChecks, workOrders } from "../db/schema-orders.ts";
 import { getOrderHeader } from "./orders.ts";
 import { INTAKE_CHECK_KEYS, INTAKE_RESULTS } from "./rules.ts";
+import { canAccessOrder } from "./status.ts";
 
 export const checklistFormSchema = z.object({
   checks: z.partialRecord(
@@ -39,12 +40,7 @@ async function accessibleOrder(db: AppDb, actor: SessionUser, orderId: string) {
   const header = await getOrderHeader(db, actor, orderId);
   if (!header) return { ok: false, code: "not_found" } as const;
   const { order } = header;
-  if (
-    actor.role === "mechanic" &&
-    order.assignedMechanicId !== actor.id &&
-    (order.assignedMechanicId !== null ||
-      !["reservada", "recibida", "diagnostico"].includes(order.status))
-  ) {
+  if (!canAccessOrder(actor, order)) {
     return { ok: false, code: "forbidden" } as const;
   }
   return { ok: true, order } as const;

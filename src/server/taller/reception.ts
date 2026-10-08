@@ -10,6 +10,7 @@ import type { ObjectStorage } from "../storage/storage.ts";
 import { recordAudit } from "./audit.ts";
 import { isChecklistComplete } from "./intake.ts";
 import { getOrderHeader, recordStatusChange } from "./orders.ts";
+import { canAccessOrder } from "./status.ts";
 
 export const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
 const signaturePrefix = "data:image/png;base64,";
@@ -128,13 +129,7 @@ async function receptionAccess(db: AppDb, actor: SessionUser, orderId: string) {
   const header = await getOrderHeader(db, actor, orderId);
   if (!header || header.order.voidedAt) return { ok: false, code: "not_found" } as const;
   const { order } = header;
-  if (
-    actor.role === "mechanic" &&
-    order.assignedMechanicId !== actor.id &&
-    (order.assignedMechanicId !== null ||
-      !["reservada", "recibida", "diagnostico"].includes(order.status))
-  )
-    return { ok: false, code: "forbidden" } as const;
+  if (!canAccessOrder(actor, order)) return { ok: false, code: "forbidden" } as const;
   if (order.status !== "reservada") return { ok: false, code: "invalid_status" } as const;
   return { ok: true } as const;
 }

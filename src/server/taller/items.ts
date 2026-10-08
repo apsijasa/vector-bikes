@@ -8,6 +8,7 @@ import { recordAudit } from "./audit.ts";
 import { getService, priceFor } from "./catalog.ts";
 import { getOrderHeader } from "./orders.ts";
 import type { BikeType } from "./rules.ts";
+import { canAccessOrder } from "./status.ts";
 
 export const catalogItemSchema = z.strictObject({
   serviceId: z.uuid({ error: "Selecciona un servicio del catálogo." }),
@@ -19,13 +20,7 @@ async function accessibleOrder(db: AppDb, actor: SessionUser, orderId: string) {
   const header = await getOrderHeader(db, actor, orderId);
   if (!header) return { ok: false, code: "not_found" } as const;
   const { order } = header;
-  if (
-    actor.role === "mechanic" &&
-    order.assignedMechanicId !== actor.id &&
-    (order.assignedMechanicId !== null ||
-      !["reservada", "recibida", "diagnostico"].includes(order.status))
-  )
-    return { ok: false, code: "forbidden" } as const;
+  if (!canAccessOrder(actor, order)) return { ok: false, code: "forbidden" } as const;
   return { ok: true, ...header } as const;
 }
 
