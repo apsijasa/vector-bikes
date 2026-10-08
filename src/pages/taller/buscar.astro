@@ -3,6 +3,8 @@ import TallerLayout from "../../layouts/TallerLayout.astro";
 import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../server/auth/admin-auth.ts";
 import { can, forbiddenResponse } from "../../server/auth/permissions.ts";
 import { getDb } from "../../server/db/client.ts";
+import { STATUS_LABELS } from "../../server/taller/rules.ts";
+import type { OrderStatus } from "../../server/taller/rules.ts";
 import { searchQuerySchema, searchTaller } from "../../server/taller/search.ts";
 
 export const prerender = false;
@@ -38,6 +40,18 @@ const canManageCustomers = can(user.role, "customers.manage");
     </div>
     <button type="submit" class="btn">Buscar</button>
   </form>
+  {results.orders.length > 0 && <div style="overflow-x:auto">
+    <table class="dense">
+      <caption>Órdenes</caption>
+      <thead><tr><th scope="col">Número</th><th scope="col">Estado</th></tr></thead>
+      <tbody>{results.orders.map((order) => (
+        <tr>
+          <th scope="row"><a href={`/taller/ordenes/${order.id}`}>{order.label}</a></th>
+          <td><span class={`status status--${order.status}`}>{STATUS_LABELS[order.status as OrderStatus]}</span></td>
+        </tr>
+      ))}</tbody>
+    </table>
+  </div>}
   <div style="overflow-x:auto">
     <table class="dense">
       <caption>Clientes de tu sucursal</caption>
@@ -50,7 +64,7 @@ const canManageCustomers = can(user.role, "customers.manage");
             </th>
           </tr>
         ))}
-        {results.customers.length === 0 && <tr><td>Sin resultados.</td></tr>}
+        {results.customers.length === 0 && results.orders.length === 0 && <tr><td>Sin resultados.</td></tr>}
       </tbody>
     </table>
   </div>

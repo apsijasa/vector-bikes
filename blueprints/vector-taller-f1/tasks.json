@@ -527,7 +527,7 @@
     ],
     "checkpoint": "f1-23",
     "files": ["src/server/taller/label.ts", "src/pages/taller/ordenes/[id]/etiqueta.ts", "src/server/taller/search.ts", "tests/integration/label.test.ts", "e2e/etiqueta.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E3-T8",
