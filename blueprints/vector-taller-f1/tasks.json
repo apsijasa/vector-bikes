@@ -548,7 +548,7 @@
     ],
     "checkpoint": "f1-24",
     "files": ["src/server/taller/items.ts", "src/server/taller/orders.ts", "src/pages/taller/ordenes/[id]/lineas.astro", "tests/integration/order-items.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E4-T1",

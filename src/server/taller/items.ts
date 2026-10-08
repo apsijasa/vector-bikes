@@ -8,6 +8,7 @@ import { recordAudit } from "./audit.ts";
 import { getService, priceFor } from "./catalog.ts";
 import { getOrderHeader } from "./orders.ts";
 import type { BikeType } from "./rules.ts";
+import { TERMINAL_STATUSES } from "./rules.ts";
 import { canAccessOrder } from "./status.ts";
 
 export const catalogItemSchema = z.strictObject({
@@ -16,9 +17,20 @@ export const catalogItemSchema = z.strictObject({
   origin: z.enum(["inicial", "adicional"]).default("inicial"),
 });
 
+const itemPriceSchema = z
+  .union([z.number(), z.string().trim().regex(/^\d+$/)])
+  .transform(Number)
+  .pipe(z.number().int().min(0).max(10_000_000));
+export const partItemSchema = z.strictObject({
+  description: z.string().trim().min(2).max(200),
+  quantity: z.coerce.number().int().min(1).max(100),
+  unitPriceClp: itemPriceSchema,
+});
+export const priceOverrideSchema = z.strictObject({ unitPriceClp: itemPriceSchema });
+
 async function accessibleOrder(db: AppDb, actor: SessionUser, orderId: string) {
   const header = await getOrderHeader(db, actor, orderId);
-  if (!header) return { ok: false, code: "not_found" } as const;
+  if (!header || header.order.voidedAt) return { ok: false, code: "not_found" } as const;
   const { order } = header;
   if (!canAccessOrder(actor, order)) return { ok: false, code: "forbidden" } as const;
   return { ok: true, ...header } as const;
@@ -30,7 +42,11 @@ async function lockOrder(db: AppDb, actor: SessionUser, orderId: string) {
     .from(workOrders)
     .where(and(eq(workOrders.branchId, actor.branchId), eq(workOrders.id, orderId)))
     .for("update");
-  return accessibleOrder(db, actor, orderId);
+  const access = await accessibleOrder(db, actor, orderId);
+  if (!access.ok) return access;
+  if ((TERMINAL_STATUSES as readonly string[]).includes(access.order.status))
+    return { ok: false, code: "invalid_status" } as const;
+  return access;
 }
 
 /** Recibe la misma transacción que agrega, cambia o anula la línea. */
@@ -112,7 +128,7 @@ async function auditAddedItem(
         itemId: item.id,
         kind: item.kind,
         origin: item.origin,
-        serviceId: item.serviceId,
+        ...(item.kind === "servicio" ? { serviceId: item.serviceId } : {}),
         quantity: item.quantity,
         unitPriceClp: item.unitPriceClp,
       },
@@ -142,6 +158,93 @@ export async function addCatalogItem(
       access.bike.bikeType as BikeType,
       now,
     );
+  });
+}
+
+export async function addPartItem(
+  db: AppDb,
+  actor: SessionUser,
+  orderId: string,
+  input: unknown,
+  now: Date,
+) {
+  if (!can(actor.role, "items.add_part")) return { ok: false, code: "forbidden" } as const;
+  const parsed = partItemSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "validation_error" } as const;
+  return db.transaction(async (tx) => {
+    const access = await lockOrder(tx, actor, orderId);
+    if (!access.ok) return access;
+    const [item] = await tx
+      .insert(workOrderItems)
+      .values({
+        ...parsed.data,
+        branchId: actor.branchId,
+        workOrderId: orderId,
+        kind: "repuesto",
+        origin: "inicial",
+        createdBy: actor.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    if (!item) throw new Error("No se pudo agregar el repuesto.");
+    await recomputeOrderTotals(tx, orderId, now);
+    await auditAddedItem(tx, actor, item, now);
+    return { ok: true, itemId: item.id } as const;
+  });
+}
+
+async function lockActiveItem(db: AppDb, actor: SessionUser, itemId: string) {
+  const scope = and(eq(workOrderItems.branchId, actor.branchId), eq(workOrderItems.id, itemId));
+  const [reference] = await db
+    .select({ orderId: workOrderItems.workOrderId })
+    .from(workOrderItems)
+    .where(and(scope, isNull(workOrderItems.voidedAt)))
+    .limit(1);
+  if (!reference) return { ok: false, code: "not_found" } as const;
+  const access = await lockOrder(db, actor, reference.orderId);
+  if (!access.ok) return access;
+  const [item] = await db
+    .select()
+    .from(workOrderItems)
+    .where(and(scope, isNull(workOrderItems.voidedAt)))
+    .for("update");
+  if (!item) return { ok: false, code: "not_found" } as const;
+  return { ok: true, item } as const;
+}
+
+export async function overrideItemPrice(
+  db: AppDb,
+  actor: SessionUser,
+  itemId: string,
+  input: unknown,
+  now: Date,
+) {
+  if (!can(actor.role, "items.override_price")) return { ok: false, code: "forbidden" } as const;
+  const parsed = priceOverrideSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "validation_error" } as const;
+  return db.transaction(async (tx) => {
+    const access = await lockActiveItem(tx, actor, itemId);
+    if (!access.ok) return access;
+    const { item } = access;
+    await tx
+      .update(workOrderItems)
+      .set({ unitPriceClp: parsed.data.unitPriceClp, updatedAt: now })
+      .where(and(eq(workOrderItems.branchId, actor.branchId), eq(workOrderItems.id, itemId)));
+    await recomputeOrderTotals(tx, item.workOrderId, now);
+    await recordAudit(
+      tx,
+      {
+        branchId: actor.branchId,
+        actorUserId: actor.id,
+        action: "item.price_changed",
+        entity: "work_order",
+        entityId: item.workOrderId,
+        details: { itemId, before: item.unitPriceClp, after: parsed.data.unitPriceClp },
+      },
+      now,
+    );
+    return { ok: true } as const;
   });
 }
 

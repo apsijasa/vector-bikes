@@ -9,8 +9,9 @@ import { bookings } from "../db/schema.ts";
 import { recordAudit } from "./audit.ts";
 import { bikeFormSchema, insertBike, listBikesOfCustomer } from "./bikes.ts";
 import { customerFormSchema, findCustomerByPhone, insertCustomer } from "./customers.ts";
-import { isAllowedTransition } from "./rules.ts";
+import { isAllowedTransition, TAX_DOC_TYPES } from "./rules.ts";
 import type { OrderStatus } from "./rules.ts";
+import { canAccessOrder } from "./status.ts";
 
 export function formatOrderNumber(n: number): string {
   return `OT-${String(n).padStart(5, "0")}`;
@@ -260,4 +261,49 @@ export async function getOrderHeader(db: AppDb, actor: SessionUser, id: string) 
     .where(and(eq(workOrders.branchId, actor.branchId), eq(workOrders.id, id)))
     .limit(1);
   return header ?? null;
+}
+
+export const taxDocSchema = z.strictObject({
+  type: z.enum(TAX_DOC_TYPES),
+  number: z.string().trim().min(1).max(30),
+  date: z.iso.date(),
+});
+
+export async function updateTaxDocument(
+  db: AppDb,
+  actor: SessionUser,
+  orderId: string,
+  input: unknown,
+  now: Date,
+) {
+  if (!can(actor.role, "tax_doc.edit")) return { ok: false, code: "forbidden" } as const;
+  const parsed = taxDocSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, code: "validation_error" } as const;
+  return db.transaction(async (tx) => {
+    const [order] = await tx
+      .select()
+      .from(workOrders)
+      .where(and(eq(workOrders.branchId, actor.branchId), eq(workOrders.id, orderId)))
+      .for("update");
+    if (!order || order.voidedAt) return { ok: false, code: "not_found" } as const;
+    if (!canAccessOrder(actor, order)) return { ok: false, code: "forbidden" } as const;
+    const { type, number, date } = parsed.data;
+    await tx
+      .update(workOrders)
+      .set({ taxDocType: type, taxDocNumber: number, taxDocDate: date, updatedAt: now })
+      .where(and(eq(workOrders.branchId, actor.branchId), eq(workOrders.id, orderId)));
+    await recordAudit(
+      tx,
+      {
+        branchId: actor.branchId,
+        actorUserId: actor.id,
+        action: "order.tax_document",
+        entity: "work_order",
+        entityId: orderId,
+        details: { type, number, date },
+      },
+      now,
+    );
+    return { ok: true } as const;
+  });
 }
