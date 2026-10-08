@@ -174,6 +174,9 @@ export const workOrderItems = pgTable(
     kind: text("kind").$type<"servicio" | "repuesto">().notNull(),
     origin: text("origin").$type<"inicial" | "adicional">().notNull(),
     serviceId: uuid("service_id").references(() => services.id, { onDelete: "restrict" }),
+    approvalId: uuid("approval_id").references(() => workOrderApprovals.id, {
+      onDelete: "restrict",
+    }),
     description: text("description").notNull(),
     quantity: integer("quantity").notNull().default(1),
     unitPriceClp: integer("unit_price_clp").notNull(),
@@ -264,6 +267,42 @@ export const orderSignatures = pgTable(
   ],
 );
 
+export const workOrderApprovals = pgTable(
+  "work_order_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    description: text("description").notNull(),
+    recommendation: text("recommendation").notNull(),
+    priceClp: integer("price_clp").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    decidedAt: instant("decided_at"),
+    decision: text("decision").$type<"aprobado" | "rechazado">(),
+    decidedIpHash: text("decided_ip_hash"),
+    voidedAt: instant("voided_at"),
+    voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_work_order_approvals_token_hash").on(t.tokenHash),
+    index("idx_work_order_approvals_order").on(t.workOrderId),
+    check("work_order_approvals_price_check", sql`price_clp > 0`),
+    check(
+      "work_order_approvals_decision_check",
+      sql`(decided_at is null and decision is null) or (decided_at is not null and decision is not null and decision in ('aprobado', 'rechazado'))`,
+    ),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
@@ -272,5 +311,6 @@ export const orderTables = [
   workOrderItems,
   orderPhotos,
   orderSignatures,
+  workOrderApprovals,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;
