@@ -732,7 +732,7 @@
     ],
     "checkpoint": "f1-32",
     "files": ["src/server/db/schema-reports.ts", "src/server/taller/reports.ts", "src/components/taller/ReportView.astro", "src/pages/taller/ordenes/[id]/informe.astro", "tests/integration/reports.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E5-T3",
