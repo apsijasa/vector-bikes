@@ -665,7 +665,7 @@
     ],
     "checkpoint": "f1-29",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/payments.ts", "src/pages/taller/ordenes/[id]/entrega.astro", "tests/integration/payments.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E4-T6",

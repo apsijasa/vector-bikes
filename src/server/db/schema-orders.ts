@@ -333,6 +333,39 @@ export const qcChecks = pgTable(
   ],
 );
 
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    kind: text("kind").$type<"abono" | "final">().notNull(),
+    method: text("method").$type<"transferencia" | "tarjeta" | "efectivo" | "otro">().notNull(),
+    amountClp: integer("amount_clp").notNull(),
+    receivedBy: uuid("received_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    receivedAt: instant("received_at").notNull(),
+    voidedAt: instant("voided_at"),
+    voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("uq_payments_one_abono")
+      .on(t.workOrderId)
+      .where(sql`kind = 'abono' and voided_at is null`),
+    index("idx_payments_branch_received").on(t.branchId, t.receivedAt),
+    check("payments_kind_check", sql`kind in ('abono', 'final')`),
+    check("payments_method_check", sql`method in ('transferencia', 'tarjeta', 'efectivo', 'otro')`),
+    check("payments_amount_check", sql`amount_clp > 0`),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
@@ -343,5 +376,6 @@ export const orderTables = [
   orderSignatures,
   workOrderApprovals,
   qcChecks,
+  payments,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;

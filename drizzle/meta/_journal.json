@@ -113,6 +113,13 @@
       "when": 1791505724100,
       "tag": "0015_high_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791507714465,
+      "tag": "0016_cheerful_princess_powerful",
+      "breakpoints": true
     }
   ]
 }
