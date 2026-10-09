@@ -14,13 +14,22 @@ import {
 import { bikes, customers, services } from "./schema-taller.ts";
 import { bookings, branches, createdAt, instant, updatedAt, users } from "./schema.ts";
 
+function branchReference() {
+  return uuid("branch_id")
+    .notNull()
+    .references(() => branches.id, { onDelete: "restrict" });
+}
+
+function creatorReference() {
+  return uuid("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" });
+}
 export const workOrders = pgTable(
   "work_orders",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     number: integer("number").notNull(),
     customerId: uuid("customer_id")
       .notNull()
@@ -55,9 +64,7 @@ export const workOrders = pgTable(
     deliveredAt: instant("delivered_at"),
     voidedAt: instant("voided_at"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -89,14 +96,11 @@ export const workOrders = pgTable(
     ),
   ],
 );
-
 export const workOrderStatusHistory = pgTable(
   "work_order_status_history",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -109,23 +113,18 @@ export const workOrderStatusHistory = pgTable(
   },
   (t) => [index("idx_work_order_status_history_order_created").on(t.workOrderId, t.createdAt)],
 );
-
 export const intakeChecks = pgTable(
   "intake_checks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
     itemKey: text("item_key").notNull(),
     result: text("result").notNull(),
     note: text("note"),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -138,36 +137,28 @@ export const intakeChecks = pgTable(
     check("intake_checks_result_check", sql`result in ('ok', 'revisar', 'malo')`),
   ],
 );
-
 export const intakeAccessories = pgTable(
   "intake_accessories",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
     description: text("description").notNull(),
     voidedAt: instant("voided_at"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index("idx_intake_accessories_order").on(t.workOrderId)],
 );
-
 export const workOrderItems = pgTable(
   "work_order_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -183,9 +174,7 @@ export const workOrderItems = pgTable(
     estimatedMinutes: integer("estimated_minutes").notNull().default(0),
     voidedAt: instant("voided_at"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -205,9 +194,7 @@ export const orderPhotos = pgTable(
   "order_photos",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -220,9 +207,7 @@ export const orderPhotos = pgTable(
     fullPurgedAt: instant("full_purged_at"),
     voidedAt: instant("voided_at"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -243,9 +228,7 @@ export const orderSignatures = pgTable(
   "order_signatures",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -253,9 +236,7 @@ export const orderSignatures = pgTable(
     storageKey: text("storage_key").notNull(),
     signedByName: text("signed_by_name").notNull(),
     signedAt: instant("signed_at").notNull(),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -271,9 +252,7 @@ export const workOrderApprovals = pgTable(
   "work_order_approvals",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -286,9 +265,7 @@ export const workOrderApprovals = pgTable(
     decidedIpHash: text("decided_ip_hash"),
     voidedAt: instant("voided_at"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
-    createdBy: uuid("created_by")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -307,9 +284,7 @@ export const qcChecks = pgTable(
   "qc_checks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -337,9 +312,7 @@ export const payments = pgTable(
   "payments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    branchId: uuid("branch_id")
-      .notNull()
-      .references(() => branches.id, { onDelete: "restrict" }),
+    branchId: branchReference(),
     workOrderId: uuid("work_order_id")
       .notNull()
       .references(() => workOrders.id, { onDelete: "restrict" }),
@@ -366,6 +339,48 @@ export const payments = pgTable(
   ],
 );
 
+export const bikeComponents = pgTable(
+  "bike_components",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: branchReference(),
+    bikeId: uuid("bike_id")
+      .notNull()
+      .references(() => bikes.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    workOrderItemId: uuid("work_order_item_id").references(() => workOrderItems.id, {
+      onDelete: "restrict",
+    }),
+    componentType: text("component_type").notNull(),
+    brand: text("brand").notNull(),
+    model: text("model").notNull(),
+    serialNumber: text("serial_number"),
+    installedAt: date("installed_at", { mode: "string" }).notNull(),
+    priceClp: integer("price_clp").notNull().default(0),
+    replacedAt: date("replaced_at", { mode: "string" }),
+    replacedByComponentId: uuid("replaced_by_component_id").references(
+      (): AnyPgColumn => bikeComponents.id,
+      { onDelete: "restrict" },
+    ),
+    voidedAt: instant("voided_at"),
+    voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "restrict" }),
+    createdBy: creatorReference(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("idx_bike_components_bike_installed").on(t.bikeId, t.installedAt),
+    index("idx_bike_components_order").on(t.workOrderId),
+    check("bike_components_price_check", sql`price_clp >= 0`),
+    check(
+      "bike_components_replaced_date_check",
+      sql`replaced_at is null or replaced_at >= installed_at`,
+    ),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
@@ -377,5 +392,6 @@ export const orderTables = [
   workOrderApprovals,
   qcChecks,
   payments,
+  bikeComponents,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;

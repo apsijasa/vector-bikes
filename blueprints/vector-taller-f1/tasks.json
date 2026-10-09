@@ -709,7 +709,7 @@
     ],
     "checkpoint": "f1-31",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/components.ts", "src/pages/taller/ordenes/[id]/componentes.astro", "tests/integration/components.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E5-T2",
