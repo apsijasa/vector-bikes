@@ -775,7 +775,7 @@
     ],
     "checkpoint": "f1-34",
     "files": ["src/server/taller/history.ts", "src/pages/taller/bicicletas/[id].astro", "src/pages/taller/clientes/[id].astro", "tests/integration/history.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E5-T5",

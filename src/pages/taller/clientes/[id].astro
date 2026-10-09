@@ -1,9 +1,11 @@
 ---
+import { DateTime } from "luxon";
 import { z } from "zod";
 import TallerLayout from "../../../layouts/TallerLayout.astro";
 import { isAllowedOrigin } from "../../../server/api/handlers.ts";
 import { loginRedirect, requireAdmin, SESSION_COOKIE } from "../../../server/auth/admin-auth.ts";
 import { can, forbiddenResponse } from "../../../server/auth/permissions.ts";
+import { TIMEZONE } from "../../../server/booking/rules.ts";
 import { getDb } from "../../../server/db/client.ts";
 import { bikeFormSchema, createBike, listBikesOfCustomer } from "../../../server/taller/bikes.ts";
 import {
@@ -12,6 +14,7 @@ import {
   getCustomer,
   updateCustomer,
 } from "../../../server/taller/customers.ts";
+import { customerTimeline } from "../../../server/taller/history.ts";
 import {
   BIKE_TYPES,
   BIKE_TYPE_LABELS,
@@ -166,6 +169,7 @@ const notices: Record<string, string> = {
 };
 const notice = notices[Astro.url.searchParams.get("hecho") ?? ""];
 const customerBikes = await listBikesOfCustomer(db, user, id.data);
+const history = await customerTimeline(db, user, id.data);
 ---
 
 <TallerLayout title={`${customer.name} — Vector Bikes`} description="Ficha y edición del cliente del taller." path="/taller/clientes" user={user}>
@@ -257,5 +261,20 @@ const customerBikes = await listBikesOfCustomer(db, user, id.data);
       </div>
       <button type="submit" class="btn">Agregar bicicleta</button>
     </form>
+  </section>
+  <section aria-labelledby="history-heading">
+    <h2 id="history-heading">Historial</h2>
+    {history.length ? (
+      <ol>
+        {history.map((event) => (
+          <li>
+            <time datetime={event.at} class="tabular-nums">{DateTime.fromISO(event.at).setZone(TIMEZONE).toFormat("dd-MM-yyyy")}</time>
+            {event.orderId && event.orderNumber && <a href={`/taller/ordenes/${event.orderId}`}>{event.orderNumber}</a>}
+            <p>{event.title}</p>
+            {event.detail && <p>{event.detail}</p>}
+          </li>
+        ))}
+      </ol>
+    ) : <p>Sin historial todavía.</p>}
   </section>
 </TallerLayout>
