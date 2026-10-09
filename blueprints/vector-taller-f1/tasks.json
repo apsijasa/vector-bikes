@@ -642,7 +642,7 @@
     ],
     "checkpoint": "f1-28",
     "files": ["src/server/db/schema-orders.ts", "src/server/taller/qc.ts", "src/pages/taller/ordenes/[id]/control.astro", "tests/integration/qc.test.ts", "e2e/control-calidad.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E4-T5",

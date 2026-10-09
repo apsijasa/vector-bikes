@@ -303,6 +303,36 @@ export const workOrderApprovals = pgTable(
   ],
 );
 
+export const qcChecks = pgTable(
+  "qc_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "restrict" }),
+    itemKey: text("item_key").notNull(),
+    result: text("result").notNull(),
+    note: text("note"),
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    selfCheck: boolean("self_check").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("idx_qc_checks_order_created").on(t.workOrderId, t.createdAt),
+    check(
+      "qc_checks_item_key_check",
+      sql`item_key in ('frenos', 'cambios', 'ruedas', 'apriete', 'neumaticos', 'prueba_de_rodaje', 'limpieza')`,
+    ),
+    check("qc_checks_result_check", sql`result in ('ok', 'falla')`),
+  ],
+);
+
 export const orderTables = [
   workOrders,
   workOrderStatusHistory,
@@ -312,5 +342,6 @@ export const orderTables = [
   orderPhotos,
   orderSignatures,
   workOrderApprovals,
+  qcChecks,
 ] as const;
 export type WorkOrder = typeof workOrders.$inferSelect;
