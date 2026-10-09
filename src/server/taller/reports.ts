@@ -18,7 +18,7 @@ import type { ObjectStorage } from "../storage/storage.ts";
 import { recordAudit } from "./audit.ts";
 import { formatOrderNumber } from "./orders.ts";
 import { INTAKE_CHECK_LABELS } from "./rules.ts";
-import { hashShareToken, newShareToken } from "./share-tokens.ts";
+import { hashShareToken, newShareToken, shareTokenSchema } from "./share-tokens.ts";
 import { canAccessOrder } from "./status.ts";
 
 export const reportFormSchema = z.strictObject({
@@ -370,4 +370,21 @@ export async function loadReportPhotos(
     if (body) photos[photoId] = `data:image/jpeg;base64,${body.toString("base64")}`;
   }
   return photos;
+}
+
+export async function viewReportByToken(
+  db: AppDb,
+  storage: ObjectStorage,
+  token: string,
+): Promise<{ snapshot: ReportSnapshot; photos: Record<string, string> } | null> {
+  const parsed = shareTokenSchema.safeParse(token);
+  if (!parsed.success) return null;
+  // Lectura pública: el token es la credencial y determina el informe, sin sesión ni sucursal.
+  const [report] = await db
+    .select({ snapshot: serviceReports.snapshot })
+    .from(serviceReports)
+    .where(eq(serviceReports.shareTokenHash, hashShareToken(parsed.data)));
+  if (!report) return null;
+  const snapshot = snapshotSchema.parse(report.snapshot);
+  return { snapshot, photos: await loadReportPhotos(storage, snapshot) };
 }

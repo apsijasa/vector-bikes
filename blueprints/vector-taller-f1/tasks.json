@@ -754,7 +754,7 @@
     ],
     "checkpoint": "f1-33",
     "files": ["src/pages/informe/[token].astro", "src/server/taller/reports.ts", "src/components/taller/ReportView.astro", "tests/integration/report-view.test.ts", "tests/integration/report-page.test.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E5-T4",
