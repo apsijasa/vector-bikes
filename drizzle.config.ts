@@ -5,7 +5,7 @@ if (existsSync(".env")) {
   process.loadEnvFile(".env");
 }
 
-// Fase 1: el esquema se reparte en schema.ts, schema-taller.ts y schema-orders.ts (< 400 líneas cada uno).
+// Fase 1: el esquema se reparte en schema.ts, schema-taller.ts, schema-orders.ts y schema-reports.ts (< 400 líneas cada uno).
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/server/db/schema*.ts",

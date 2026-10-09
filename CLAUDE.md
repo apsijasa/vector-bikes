@@ -58,7 +58,7 @@ Astro 7 (output server, @astrojs/node standalone) · TypeScript 6 · Preact (isl
 
 | Tema | Única fuente de verdad |
 |---|---|
-| Esquema | `src/server/db/schema.ts` (base, sucursal, usuarios) ← `schema-taller.ts` (auditoría, catálogo, clientes, bicis) ← `schema-orders.ts` (órdenes y lo que cuelga) → `pnpm db:generate` → `pnpm db:migrate` |
+| Esquema | `src/server/db/schema.ts` (base, sucursal, usuarios) ← `schema-taller.ts` (auditoría, catálogo, clientes, bicis) ← `schema-orders.ts` (órdenes y lo que cuelga) ← `schema-reports.ts` (informe final) → `pnpm db:generate` → `pnpm db:migrate` |
 | Conexión | `src/server/db/client.ts` (`getDb()`, tipo `AppDb`); los módulos reciben `db` como argumento |
 | Entorno | `src/lib/env.ts` (accesores por funcionalidad); nunca `process.env` en otro lado |
 | Reglas del negocio (reservas) | `src/server/booking/rules.ts` |

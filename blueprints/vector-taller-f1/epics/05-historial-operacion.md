@@ -33,7 +33,8 @@ Astro 7 SSR · TypeScript 6 · Preact · Postgres 16 · Drizzle ORM 0.45 · alma
 ## Directory subtree
 
 ```
-src/server/db/schema-orders.ts             # edit: bike_components, service_reports
+src/server/db/schema-orders.ts             # edit: bike_components
+src/server/db/schema-reports.ts            # NEW (E5-T2): service_reports, reportTables
 src/server/db/schema.ts                     # edit (E5-T7): contracción
 src/server/taller/components.ts · reports.ts · history.ts · dashboard.ts · maintenance.ts   # NEW
 src/server/api/task-handlers.ts             # edit (E5-T6)
@@ -137,14 +138,14 @@ git tag -l f1-31 | grep -qx f1-31   # expect: exit 0
 
 **Depends on:** `E5-T1` · **Priority:** p1
 
-1. `schema-orders.ts`: `serviceReports`; generate → migrate.
+1. `schema-reports.ts` (nuevo, importa de `schema-orders.ts`; `schema-orders.ts` ya está en 397 líneas, §20.3 #32): `serviceReports` y `export const reportTables = [serviceReports] as const`; generate → migrate.
 2. `src/server/taller/reports.ts`: `type ReportSnapshot` (forma de arriba); `buildReportSnapshot(db, orderId, { recommendations, nextChecks })`: bici, primer nombre del cliente, `workDone` (líneas no anuladas: descripción y cantidad; sin precios), `problemsFound` (puntos del checklist en `revisar`/`malo` con nota), `diagnosis`, `componentsReplaced` (instalados en esta orden; `replaces` = descripción del reemplazado o `null`), `photosBefore` (fotos `recepcion` no anuladas: id y `thumb_key`), `photosAfter` (`terminado`), `rejectedWork` (propuestas `rechazado` de la orden), `totalClp`, `kmNoted`; `generateReport(db, actor, orderId, input, now)`: `reports.generate`; orden en `lista_para_retirar` o `entregada` (si no `invalid_status`); recomendaciones y próximas revisiones ≤ 2000; `newShareToken()`; upsert por `work_order_id` (`onConflictDoUpdate` reemplaza snapshot, hash, `generated_at`, `generated_by`); audit `report.generated` → `{ ok: true, token }`. `getReportForStaff(db, actor, orderId)`; `loadReportPhotos(storage, snapshot)` → `Record<photoId, "data:image/jpeg;base64,…">` leyendo miniaturas.
 3. `src/components/taller/ReportView.astro`: props `{ snapshot; photos: Record<string, string> }` con tipos propios (no importa `src/server/**`); secciones Bicicleta, Trabajo realizado, Problemas encontrados, Componentes reemplazados, Antes y después, Recomendaciones, Próximas revisiones, Trabajos rechazados, Total; imprimible.
 4. `src/pages/taller/ordenes/[id]/informe.astro`: formulario "Recomendaciones" (por defecto, los `aftercare` de los servicios de la orden) y "Próximas revisiones" → "Generar informe" → respuesta con el enlace `<PUBLIC_SITE_URL>/informe/<token>` mostrado una vez + "Enviar por WhatsApp"; si existe, `ReportView` con las fotos.
 5. `tests/integration/reports.test.ts`: criterios 1–5 (orden armada con dos fotos por etapa, una propuesta rechazada, un componente que reemplaza a otro).
 
 **Files**
-- `src/server/db/schema-orders.ts` — edit
+- `src/server/db/schema-reports.ts` — new
 - `src/server/taller/reports.ts` — new
 - `src/components/taller/ReportView.astro` — new
 - `src/pages/taller/ordenes/[id]/informe.astro` — new
@@ -340,7 +341,7 @@ git tag -l f1-36 | grep -qx f1-36   # expect: exit 0
 2. `src/server/db/schema.ts`: eliminar `adminUsers`, el tipo `AdminUser` y su entrada en `allTables`; en `adminSessions` eliminar `adminUserId` y agregar `.notNull()` a `userId`. Nada aditivo en este cambio.
 3. `pnpm db:generate` y leer el SQL de la migración que emite (el archivo más nuevo en `drizzle/`): solo `DROP CONSTRAINT`, `DROP COLUMN admin_user_id`, `SET NOT NULL` y `DROP TABLE "admin_users"`. Si drizzle-kit pregunta algo, detenerse. Luego `pnpm db:migrate`.
 4. `src/server/auth/admin-auth.ts`: quitar el fallback y la copia (y sus imports); `loginAdmin` solo lee `users`.
-5. `scripts/db-check.ts`: además de `CREATE TABLE`, leer `DROP TABLE(?: IF EXISTS)? "(?:public"\.")?([a-z_]+)"` y restar esas tablas de las esperadas; revisar columnas de `allTables`, `tallerTables` (de `schema-taller.ts`) y `orderTables` (de `schema-orders.ts`).
+5. `scripts/db-check.ts`: además de `CREATE TABLE`, leer `DROP TABLE(?: IF EXISTS)? "(?:public"\.")?([a-z_]+)"` y restar esas tablas de las esperadas; revisar columnas de `allTables`, `tallerTables` (de `schema-taller.ts`) `orderTables` (de `schema-orders.ts`) y `reportTables` (de `schema-reports.ts`).
 6. `tests/integration/admin-auth.test.ts`: quitar los casos de copia; conservar login, sesión, cambio de clave, límite de intentos, logout y cookie; agregar que `information_schema.columns` no tiene `admin_sessions.admin_user_id`.
 7. `README.md`: nueva sección `## Operación del taller` (entrar por `/admin/login` → `/taller`; crear y desactivar usuarios en `/taller/usuarios`; recepción paso a paso en la tablet, la puede hacer cualquier rol; etiqueta e impresora de 62 mm; adicional por WhatsApp; control de calidad; pagos y entrega; informe; garantía; si falla una foto; el escenario de Make.com; respaldos); en "Configuración de producción → 3. Esquema" reemplazar la lista fija de 9 tablas por "confirma que `pnpm db:check` sale `{"ok":true,…}` en desarrollo y que esas tablas aparecen en producción"; en "Cambiar la clave del panel" agregar que el dueño también puede resetear claves en `/taller/usuarios`.
 

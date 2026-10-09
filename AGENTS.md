@@ -50,6 +50,10 @@ Orden de trabajo de la fase 1: `blueprints/vector-taller-f1/tasks.json` y `bluep
 | `tests/**` | todo lo anterior | red real |
 | `e2e/**` | `@playwright/test`, `e2e/fixtures.ts`; `global-setup.ts` además `hashPassword` de `src/server/auth/admin-auth.ts` | el resto de `src/` (habla por HTTP) |
 
+## Esquema
+
+El esquema vive en cuatro archivos, que importan en un solo sentido: `src/server/db/schema.ts` (base, sucursal, usuarios) ← `schema-taller.ts` (auditoría, catálogo, clientes, bicis) ← `schema-orders.ts` (órdenes y lo que cuelga) ← `schema-reports.ts` (informe final). Después, `pnpm db:generate` → `pnpm db:migrate`. Cada tabla nueva va al arreglo de su archivo (`allTables`, `tallerTables`, `orderTables` o `reportTables`). Detalle en `.claude/rules/database.md`.
+
 ## Reglas por carpeta
 
 Antes de tocar archivos en estas rutas, leer el archivo de reglas correspondiente. No son opcionales.
