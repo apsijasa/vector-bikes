@@ -744,14 +744,16 @@
       "WHEN `viewReportByToken` recibe el token vigente THE SYSTEM SHALL devolver el snapshot y las miniaturas de antes y después como `data:image/jpeg;base64,`",
       "WHEN recibe un token anterior a una regeneración, inexistente o con forma inválida THE SYSTEM SHALL devolver `null`",
       "WHEN la copia completa de una foto de recepción fue purgada por retención THE SYSTEM SHALL seguir devolviendo su miniatura",
-      "WHEN arma la vista pública THE SYSTEM SHALL no incluir teléfono, correo ni RUT del cliente"
+      "WHEN arma la vista pública THE SYSTEM SHALL no incluir teléfono, correo ni RUT del cliente",
+      "WHEN `/informe/[token]` recibe un token inexistente, de forma inválida o reemplazado al regenerar THE SYSTEM SHALL devolver la misma respuesta 404 \"Enlace no válido\", idéntica byte a byte en estado, cabeceras y cuerpo",
+      "WHEN una misma IP acumula 5 enlaces no válidos en 10 minutos THE SYSTEM SHALL responder 429 con `Retry-After` a toda petición de esa IP, también con un token vigente, sin consultar el informe"
     ],
     "verify": [
-      "pnpm test tests/integration/reports.test.ts   # expect: exit 0, 0 failed",
+      "pnpm test tests/integration/report-view.test.ts tests/integration/report-page.test.ts   # expect: exit 0, 0 failed",
       "pnpm format && pnpm gate   # expect: exit 0"
     ],
     "checkpoint": "f1-33",
-    "files": ["src/pages/informe/[token].astro", "src/server/taller/reports.ts", "tests/integration/reports.test.ts"],
+    "files": ["src/pages/informe/[token].astro", "src/server/taller/reports.ts", "src/components/taller/ReportView.astro", "tests/integration/report-view.test.ts", "tests/integration/report-page.test.ts"],
     "status": "pending"
   },
   {

@@ -179,14 +179,20 @@ git tag -l f1-32 | grep -qx f1-32   # expect: exit 0
 
 **Depends on:** `E5-T2` · **Priority:** p1
 
+Sigue §20.3 #33, que aplica a `/informe` la regla de #31: un enlace no válido nunca revela si el token existió.
+
 1. `reports.ts`: `viewReportByToken(db, storage, token)`: `shareTokenSchema` (forma inválida → `null` sin consultar); busca por `hashShareToken(token)`; sin fila → `null`; devuelve `{ snapshot, photos: await loadReportPhotos(storage, snapshot) }`. Las miniaturas existen aunque la copia completa se haya purgado.
-2. `src/pages/informe/[token].astro`: `prerender = false`; `Base` con `noindex`; `cache-control: no-store`; `referrer-policy: no-referrer`; `null` → 404 "Informe no disponible"; si no, `ReportView`.
-3. `tests/integration/reports.test.ts`: criterios 1–4 (purga simulada: `full_purged_at` fijado y el objeto completo borrado del almacenamiento local).
+2. `src/pages/informe/[token].astro`: `prerender = false`; `Base` con `noindex` y `chrome="none"`; en toda respuesta `cache-control: no-store`, `referrer-policy: no-referrer` y `x-robots-tag: noindex`; registra `originForLog` (nunca el token). Orden: `checkRateLimit` → si corresponde, 429 "Demasiados intentos. Vuelve a intentar en 10 minutos." con `Retry-After`, sin consultar el informe → `viewReportByToken` → `null` → `recordAttempt` y 404 "Enlace no válido", una respuesta fija igual para token inexistente, de forma inválida o reemplazado → si no, 200 con `ReportView`. Solo los enlaces no válidos cuentan como intento: el cliente que abre su informe varias veces no gasta el límite.
+3. `ReportView.astro`: edición mínima para que las fotos no desborden fuera de `/taller` (ancho máximo del contenedor); nada más cambia.
+4. `tests/integration/report-view.test.ts`: criterios 1–4 (purga simulada: `full_purged_at` fijado y el objeto completo borrado del almacenamiento local). `reports.test.ts` no se toca: ya está en 397 líneas.
+5. `tests/integration/report-page.test.ts` (con `AstroContainer`, como `approval-page.test.ts`): criterios 5–6; las tres respuestas 404 se comparan byte a byte (estado, cabeceras y cuerpo).
 
 **Files**
 - `src/pages/informe/[token].astro` — new
 - `src/server/taller/reports.ts` — edit
-- `tests/integration/reports.test.ts` — edit
+- `src/components/taller/ReportView.astro` — edit
+- `tests/integration/report-view.test.ts` — new
+- `tests/integration/report-page.test.ts` — new
 
 **Acceptance**
 
@@ -194,11 +200,13 @@ git tag -l f1-32 | grep -qx f1-32   # expect: exit 0
 2. **WHEN** recibe un token anterior a una regeneración, inexistente o con forma inválida **THE SYSTEM SHALL** devolver `null`
 3. **WHEN** la copia completa de una foto de recepción fue purgada por retención **THE SYSTEM SHALL** seguir devolviendo su miniatura
 4. **WHEN** arma la vista pública **THE SYSTEM SHALL** no incluir teléfono, correo ni RUT del cliente
+5. **WHEN** `/informe/[token]` recibe un token inexistente, de forma inválida o reemplazado al regenerar **THE SYSTEM SHALL** devolver la misma respuesta 404 "Enlace no válido", idéntica byte a byte en estado, cabeceras y cuerpo
+6. **WHEN** una misma IP acumula 5 enlaces no válidos en 10 minutos **THE SYSTEM SHALL** responder 429 con `Retry-After` a toda petición de esa IP, también con un token vigente, sin consultar el informe
 
 **Verify**
 
 ```bash
-pnpm test tests/integration/reports.test.ts   # expect: exit 0, 0 failed
+pnpm test tests/integration/report-view.test.ts tests/integration/report-page.test.ts   # expect: exit 0, 0 failed
 pnpm format && pnpm gate   # expect: exit 0
 ```
 
