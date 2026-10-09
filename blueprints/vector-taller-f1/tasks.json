@@ -686,7 +686,7 @@
     ],
     "checkpoint": "f1-30",
     "files": ["src/server/taller/delivery.ts", "src/pages/taller/ordenes/[id]/entrega.astro", "tests/integration/delivery.test.ts", "e2e/entrega.spec.ts"],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E5-T1",
